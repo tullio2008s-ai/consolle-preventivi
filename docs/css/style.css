@@ -131,7 +131,9 @@ textarea{resize:vertical}
 .login-bg.on{display:flex}
 .login-box{background:#fff;border-radius:11px;padding:28px;width:min(340px,92vw);border-top:4px solid #cc0000;box-shadow:0 10px 40px rgba(0,0,0,.12);text-align:center}
 .login-box img{height:34px;margin-bottom:16px}
-.login-box input{text-align:center;font-size:20px;letter-spacing:6px;margin-bottom:10px}
+.login-box input{text-align:left;font-size:15px;letter-spacing:normal;margin-bottom:12px}
+.login-box label.lbl{margin-top:2px}
+.login-box .btnr{margin-top:4px}
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
 .kpi{background:#fff;border:1px solid #eee;border-left:4px solid #cc0000;border-radius:9px;padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
 .kpi .v{font-size:24px;font-weight:900;color:#111;margin-top:4px}
