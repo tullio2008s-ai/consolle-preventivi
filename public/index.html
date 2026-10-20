@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Preventivi – Gettoniere-Shop</title>
+<link rel="icon" href="assets/logo.png">
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="login-bg" id="login">
+  <div class="login-box">
+    <img src="assets/logo.png" alt="Gettoniere-Shop">
+    <label class="lbl" style="text-align:left">Email</label>
+    <input id="lg-email" type="email" autocomplete="username" onkeydown="if(event.key==='Enter')$('lg-pw').focus()">
+    <label class="lbl" style="text-align:left">Password</label>
+    <input id="lg-pw" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="btnr" onclick="doLogin()">Accedi</button>
+    <div id="login-err" style="color:#cc0000;font-size:12px;min-height:16px"></div>
+  </div>
+</div>
+
+<!-- CAMBIO PASSWORD -->
+<div class="mbg" id="pw-modal" onclick="if(event.target===this)closePw()">
+  <div class="mbox" style="width:min(380px,94vw)">
+    <h3>🔑 Cambia password</h3>
+    <label class="lbl">Password attuale</label><input id="pw-old" type="password" autocomplete="current-password" style="margin-bottom:9px">
+    <label class="lbl">Nuova password (min. 10 caratteri)</label><input id="pw-new" type="password" autocomplete="new-password" style="margin-bottom:9px">
+    <label class="lbl">Ripeti nuova password</label><input id="pw-new2" type="password" autocomplete="new-password" onkeydown="if(event.key==='Enter')savePw()">
+    <div id="pw-err" style="color:#cc0000;font-size:12px;min-height:16px;margin-top:6px"></div>
+    <div class="mbtns"><button class="mcanc" onclick="closePw()">Annulla</button><button class="msave" onclick="savePw()">Salva</button></div>
+  </div>
+</div>
+
+<div class="topbar">
+  <div class="topbar-i">
+    <img src="assets/logo.png" class="logo" alt="Gettoniere-Shop">
+    <div class="tabs">
+      <button class="tb on" data-t="dashboard" onclick="showTab('dashboard')">📊 Dashboard</button>
+      <button class="tb" data-t="nuovo" onclick="showTab('nuovo')">+ Preventivo</button>
+      <button class="tb" data-t="archivio" id="tab-arch" onclick="showTab('archivio')">📁 Archivio</button>
+      <button class="tb" data-t="clienti" onclick="showTab('clienti')">👥 Clienti</button>
+      <button class="tb" data-t="prodotti" onclick="showTab('prodotti')">📦 Prodotti</button>
+      <button class="tb" data-t="brochure" onclick="showTab('brochure')">🗂 Brochure</button>
+    </div>
+    <div class="user-box"><span id="user-name"></span><span id="auth-btns" style="display:none;gap:6px"><button class="tb" onclick="openPw()">🔑 Password</button><button class="save-btn" onclick="doLogout()">Esci</button></span></div>
+  </div>
+</div>
+<div class="msg" id="msg"></div>
+
+<div class="wrap">
+
+<!-- DASHBOARD -->
+<div id="v-dashboard">
+  <div class="kpis" id="kpis"></div>
+  <div class="g2">
+    <div class="card"><div class="ctitle">📈 Ultimi mesi (totale offerto)</div><div id="bars" style="padding:18px 6px 24px"></div></div>
+    <div class="card"><div class="ctitle">🏷 Per stato</div><div id="by-stato"></div></div>
+  </div>
+  <div class="card"><div class="ctitle">🕒 Ultimi preventivi</div><div id="dash-last"></div></div>
+</div>
+
+<!-- NUOVO PREVENTIVO -->
+<div id="v-nuovo" style="display:none">
+<div class="layout">
+<div class="left">
+
+<div class="card">
+  <div class="ctitle">👤 Dati Cliente <span class="ok-badge" id="cli-badge" style="display:none">✓ In rubrica</span></div>
+  <div class="g2">
+    <div class="crel gf">
+      <label class="lbl">Ragione Sociale / Azienda</label>
+      <input id="f-co" autocomplete="off" placeholder="Digita per cercare nella rubrica…" oninput="cSearch(this.value)" onkeydown="cNav(event)">
+      <div class="cdrop" id="cdrop"></div>
+    </div>
+    <div><label class="lbl">Referente</label><input id="f-cn"></div>
+    <div class="gf"><label class="lbl">Indirizzo</label><input id="f-ca"></div>
+    <div><label class="lbl">Città / CAP / Prov.</label><input id="f-cit"></div>
+    <div><label class="lbl">P.IVA / C.F.</label><input id="f-cv"></div>
+    <div><label class="lbl">Email</label><input id="f-ce" type="email"></div>
+    <div><label class="lbl">Telefono</label><input id="f-cp" type="tel"></div>
+  </div>
+  <div style="margin-top:9px;display:flex;gap:7px;flex-wrap:wrap">
+    <button class="btnr" style="width:auto;padding:5px 12px;font-size:12px;margin:0" onclick="saveClientNow()">💾 Salva in rubrica</button>
+    <button class="btng" style="width:auto;padding:5px 12px;font-size:12px" onclick="clearClient()">✕ Svuota</button>
+  </div>
+</div>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:11px;padding-bottom:7px;border-bottom:2px solid #f5f5f5">
+    <div class="ctitle" style="margin:0;border:none;padding:0">🛍️ Articoli</div>
+    <span style="font-size:11px;color:#bbb;background:#f5f5f5;padding:2px 8px;border-radius:4px">Cerca per nome o codice SKU</span>
+  </div>
+  <div id="items-wrap"></div>
+  <button class="addrow" onclick="addItem()">+ Aggiungi articolo</button>
+</div>
+
+<div class="card">
+  <div class="ctitle">🚚 Trasporto</div>
+  <div style="display:grid;grid-template-columns:1fr 130px 130px;gap:9px;align-items:end">
+    <div><label class="lbl">Descrizione</label><input id="f-sn" value="Spedizione corriere" oninput="recalc()"></div>
+    <div><label class="lbl">Costo € (no IVA)</label><input id="f-sc" type="number" step="0.01" placeholder="0,00" oninput="recalc()"></div>
+    <div><label class="lbl">Totale con IVA</label><div id="ship-d" class="ship-d free">Gratuita</div></div>
+  </div>
+  <div id="ship-info" style="margin-top:5px;font-size:11px;color:#aaa;display:none"></div>
+</div>
+
+<div class="card">
+  <div class="ctitle">⚙️ Condizioni Commerciali</div>
+  <div class="g3">
+    <div><label class="lbl">Pagamento</label>
+      <select id="f-pay"><option>Bonifico vista fattura</option><option>Stripe</option><option>PayPal</option><option>Contrassegno</option></select></div>
+    <div><label class="lbl">Validità</label>
+      <select id="f-val"><option>15 giorni</option><option selected>30 giorni</option><option>45 giorni</option><option>60 giorni</option><option>90 giorni</option></select></div>
+    <div><label class="lbl">Consegna (gg lav.)</label><input id="f-del" placeholder="Es. 3-5"></div>
+    <div><label class="lbl">Resa</label><input id="f-resa" placeholder="Es. Franco destino"></div>
+    <div class="gf" style="grid-column:span 2"><label class="lbl">Garanzia</label><input id="f-gar" placeholder="Es. 24 mesi"></div>
+    <div class="gf"><label class="lbl">Note aggiuntive</label><textarea id="f-nt" rows="3" placeholder="Condizioni particolari…"></textarea></div>
+  </div>
+</div>
+
+<div class="card" id="hist-card" style="display:none">
+  <div class="ctitle">🕘 Storico modifiche</div>
+  <div id="hist"></div>
+</div>
+
+</div><!-- /left -->
+<div class="right">
+  <div class="card" style="padding:13px">
+    <label class="lbl">N° Preventivo</label>
+    <input id="f-num" readonly style="font-family:monospace;font-weight:700;margin-bottom:8px;background:#fafafa" value="(assegnato al salvataggio)">
+    <label class="lbl">Data</label><input id="f-date" type="date" style="margin-bottom:8px">
+    <label class="lbl">Stato</label>
+    <select id="f-stato"><option value="bozza">Bozza</option><option value="inviato">Inviato</option><option value="accettato">Accettato</option><option value="perso">Perso</option></select>
+  </div>
+  <div class="totbox">
+    <div class="tlbl">Riepilogo</div>
+    <div class="trow" id="t-art"><span>Articoli (0)</span><span>€ 0,00</span></div>
+    <div class="trow" id="t-ship" style="display:none"><span>🚚 Trasporto</span><span>€ 0,00</span></div>
+    <div class="trow sm" id="t-imp"><span>Imponibile</span><span>€ 0,00</span></div>
+    <div class="trow sm" id="t-iva"><span>IVA</span><span>€ 0,00</span></div>
+    <div class="tsep"></div>
+    <div class="tgrand"><span class="tgl">TOTALE</span><span class="tgv" id="t-tot">€ 0,00</span></div>
+  </div>
+  <div class="card" style="padding:13px">
+    <button class="btnr" id="btn-save" onclick="saveQuote()">💾 Salva preventivo</button>
+    <button class="btno" id="btn-pdf" onclick="generatePDF()">📄 Salva e genera PDF</button>
+    <button class="btno" id="btn-mail" onclick="doEmail()">✉️ Invia Email con PDF</button>
+    <button class="btng" onclick="newQuote()">🔄 Nuovo preventivo</button>
+  </div>
+  <div class="tip"><b>💡 Ricerca:</b> digita nome o SKU. <span id="tip-cnt"></span><br><br>I dati sono salvati online: li ritrovi da qualsiasi dispositivo.</div>
+</div>
+</div>
+</div>
+
+<!-- ARCHIVIO -->
+<div id="v-archivio" style="display:none">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px">
+    <div style="font-weight:700;font-size:17px">Preventivi Salvati <span id="arch-cnt" style="font-size:13px;color:#bbb;font-weight:400"></span></div>
+    <button class="btnr" style="width:auto;padding:7px 14px;font-size:12px;margin:0" onclick="newQuote()">+ Nuovo</button>
+  </div>
+  <div class="fbar">
+    <input id="af-q" placeholder="Cerca numero, cliente, email…" oninput="renderArch()">
+    <select id="af-st" onchange="renderArch()"><option value="">Tutti gli stati</option><option value="bozza">Bozza</option><option value="inviato">Inviato</option><option value="accettato">Accettato</option><option value="perso">Perso</option></select>
+    <input id="af-d1" type="date" title="Dal" onchange="renderArch()">
+    <input id="af-d2" type="date" title="Al" onchange="renderArch()">
+    <button class="btng" style="width:auto" onclick="['af-q','af-st','af-d1','af-d2'].forEach(i=>$(i).value='');renderArch()">Azzera</button>
+  </div>
+  <div id="arch-list"></div>
+</div>
+
+<!-- CLIENTI -->
+<div id="v-clienti" style="display:none">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px;flex-wrap:wrap;gap:7px">
+    <div style="font-weight:700;font-size:17px">Rubrica Clienti <span id="cli-cnt" style="font-size:13px;color:#bbb;font-weight:400"></span></div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap">
+      <button class="btnr" style="width:auto;padding:6px 13px;font-size:12px;margin:0" onclick="openCliModal()">+ Aggiungi</button>
+      <label class="ilbl">📥 Importa Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="importCli(this)"></label>
+      <button class="btng" style="width:auto;padding:6px 11px;font-size:12px" onclick="exportCli()">📤 Esporta</button>
+    </div>
+  </div>
+  <div class="fbar"><input id="cq" placeholder="Cerca azienda, referente, città, email, P.IVA…" oninput="renderCli()"></div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <div style="overflow-x:auto"><table class="tbl">
+      <thead><tr><th>Azienda</th><th>Referente</th><th>Email</th><th>Telefono</th><th>P.IVA</th><th>Città</th><th></th></tr></thead>
+      <tbody id="cli-body"></tbody></table></div>
+    <div id="cli-more" style="padding:10px;text-align:center;font-size:12px;color:#999"></div>
+  </div>
+</div>
+
+<!-- PRODOTTI -->
+<div id="v-prodotti" style="display:none">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px;flex-wrap:wrap;gap:7px">
+    <div style="font-weight:700;font-size:17px">Catalogo Prodotti <span id="prod-cnt" style="font-size:13px;color:#bbb;font-weight:400"></span></div>
+    <label class="ilbl">📥 Importa Excel (aggiorna per SKU)<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="importProd(this)"></label>
+  </div>
+  <div class="fbar"><input id="pq" placeholder="Cerca nome, SKU, categoria…" oninput="renderProd()">
+    <select id="pcat" onchange="renderProd()"></select></div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <div style="overflow-x:auto"><table class="tbl">
+      <thead><tr><th>Foto</th><th>SKU</th><th>Nome</th><th>Prezzo</th><th>Categoria</th><th></th></tr></thead>
+      <tbody id="prod-body"></tbody></table></div>
+    <div id="prod-more" style="padding:10px;text-align:center;font-size:12px;color:#999"></div>
+  </div>
+</div>
+
+<!-- BROCHURE -->
+<div id="v-brochure" style="display:none">
+  <div class="brgrid">
+    <div class="card">
+      <div class="ctitle">🗂 Brochure prodotto (PDF)</div>
+      <label class="lbl">Cerca prodotto</label>
+      <div class="srel" style="margin-bottom:0">
+        <input id="br-q" autocomplete="off" placeholder="Nome o SKU…" oninput="brSearch(this.value)">
+        <div class="sdrop" id="br-drop"></div>
+      </div>
+      <div id="br-form" style="display:none;margin-top:14px">
+        <div class="g2">
+          <div class="gf"><label class="lbl">Titolo</label><input id="br-t" oninput="brPreview()"></div>
+          <div><label class="lbl">SKU</label><input id="br-sku" oninput="brPreview()"></div>
+          <div><label class="lbl">Prezzo € (IVA esclusa) — vuoto = non mostrare</label><input id="br-p" type="number" step="0.01" oninput="brPreview()"></div>
+          <div class="gf"><label class="lbl">Descrizione / caratteristiche (una per riga)</label><textarea id="br-d" rows="7" oninput="brPreview()"></textarea></div>
+        </div>
+        <button class="btnr" style="margin-top:10px" onclick="brPDF()">📄 Scarica brochure PDF</button>
+      </div>
+    </div>
+    <div class="card"><div class="ctitle">Anteprima</div><div id="br-prev" style="color:#bbb;font-size:13px">Seleziona un prodotto.</div></div>
+  </div>
+</div>
+
+</div><!-- /wrap -->
+
+<!-- MODAL CLIENTE -->
+<div class="mbg" id="cli-modal" onclick="if(event.target===this)closeCliModal()">
+  <div class="mbox">
+    <h3 id="cli-modal-ttl">Aggiungi Cliente</h3>
+    <input type="hidden" id="cli-modal-id">
+    <div class="g2" style="gap:9px">
+      <div class="gf"><label class="lbl">Ragione Sociale / Azienda</label><input id="mc-co"></div>
+      <div><label class="lbl">Referente</label><input id="mc-cn"></div>
+      <div class="gf"><label class="lbl">Indirizzo</label><input id="mc-ca"></div>
+      <div><label class="lbl">Città / CAP / Prov.</label><input id="mc-cit"></div>
+      <div><label class="lbl">P.IVA / C.F.</label><input id="mc-cv"></div>
+      <div><label class="lbl">Email</label><input id="mc-ce" type="email"></div>
+      <div><label class="lbl">Telefono</label><input id="mc-cp" type="tel"></div>
+    </div>
+    <div class="mbtns">
+      <button class="mcanc" onclick="closeCliModal()">Annulla</button>
+      <button class="msave" onclick="saveCliModal()">💾 Salva</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

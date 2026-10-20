@@ -1,0 +1,15 @@
+{
+  "name": "consolle-preventivi",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file=.env scripts/dev-server.mjs",
+    "crea-utente": "node --env-file=.env scripts/crea-utente.mjs",
+    "seed": "node scripts/seed.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  },
+  "engines": { "node": ">=18" }
+}
