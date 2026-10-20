@@ -16,18 +16,25 @@ let LOGO = '';             // dataURL del logo per i PDF
 let curId = null;          // id del preventivo aperto (null = nuovo)
 let items = [], seq = 0;
 
-// ─────────── API ───────────
+// ─────────── API (Google Apps Script) ───────────
+const API_URL = window.API_URL || '/api';
+let TOKEN = '';
+try { TOKEN = localStorage.getItem('gs_token') || ''; } catch (e) {}
+const setToken = t => { TOKEN = t || ''; try { t ? localStorage.setItem('gs_token', t) : localStorage.removeItem('gs_token'); } catch (e) {} };
+
 async function api(path, opts = {}) {
-  const r = await fetch('/api/' + path, {
-    credentials: 'same-origin',
-    headers: opts.body ? { 'Content-Type': 'application/json' } : {},
-    ...opts,
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  const [p, qs] = path.split('?');
+  // text/plain evita la richiesta preliminare CORS, che Apps Script non gestisce
+  const r = await fetch(API_URL, {
+    method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ path: p, method: opts.method || 'GET', query: Object.fromEntries(new URLSearchParams(qs || '')), body: opts.body, token: TOKEN }),
   });
-  const out = await r.json().catch(() => ({}));
-  if (r.status === 401 && path !== 'password') { showLogin(); throw new Error('Accesso richiesto'); }
-  if (!r.ok) throw new Error(out.error || 'Errore ' + r.status);
-  return out;
+  const out = await r.json().catch(() => ({ error: 'Risposta non valida dal server', status: 502 }));
+  if (out.error) {
+    if (out.status === 401 && p !== 'password' && p !== 'login') { setToken(''); showLogin(); throw new Error('Sessione scaduta: accedi di nuovo'); }
+    throw new Error(out.error);
+  }
+  return out.data;
 }
 
 function showMsg(txt, type = 'ok') {
@@ -43,15 +50,15 @@ const fail = e => showMsg(e.message || String(e), 'warn');
 function showLogin() { $('login').classList.add('on'); setTimeout(() => ($('lg-email').value ? $('lg-pw') : $('lg-email')).focus(), 50); }
 async function doLogin() {
   $('login-err').textContent = '';
+  const btn = document.querySelector('#login .btnr'); btn.disabled = true; btn.textContent = 'Accesso…';
   try {
-    const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: $('lg-email').value, password: $('lg-pw').value }) });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) { $('login-err').textContent = j.error || 'Accesso negato'; $('lg-pw').select(); return; }
-    $('login').classList.remove('on'); $('lg-pw').value = '';
-    start(j.user, j.auth_attiva);
-  } catch (e) { $('login-err').textContent = 'Errore di connessione'; }
+    const j = await api('login', { method: 'POST', body: { email: $('lg-email').value, password: $('lg-pw').value } });
+    setToken(j.token); $('login').classList.remove('on'); $('lg-pw').value = '';
+    start(j.user, true);
+  } catch (e) { $('login-err').textContent = e.message; $('lg-pw').select(); }
+  finally { btn.disabled = false; btn.textContent = 'Accedi'; }
 }
-async function doLogout() { await fetch('/api/login', { method: 'DELETE' }); location.reload(); }
+function doLogout() { setToken(''); location.reload(); }
 function openPw() { ['pw-old', 'pw-new', 'pw-new2'].forEach(i => $(i).value = ''); $('pw-err').textContent = ''; $('pw-modal').classList.add('on'); $('pw-old').focus(); }
 function closePw() { $('pw-modal').classList.remove('on'); }
 async function savePw() {
@@ -65,11 +72,9 @@ window.onload = async () => {
   fetch('assets/logo.png').then(r => r.blob()).then(b => new Promise(res => {
     const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(b);
   })).then(d => LOGO = d).catch(() => {});
-  try {
-    const r = await fetch('/api/login', { credentials: 'same-origin' });
-    if (r.ok) { const j = await r.json(); start(j.user, j.auth_attiva); }
-    else showLogin();
-  } catch (e) { showMsg('Server non raggiungibile', 'warn'); }
+  if (!TOKEN) return showLogin();
+  try { const j = await api('login'); start(j.user, true); }
+  catch (e) { showLogin(); }
 };
 
 let started = false;
@@ -546,6 +551,9 @@ async function generatePDF() {
     if (!await saveQuote(true)) return;
     const { doc, fname } = buildPDF(); doc.save(fname);
     showMsg(`Preventivo ${$('f-num').value} salvato e PDF generato`);
+    // copia di archivio su Drive (in secondo piano: un errore qui non blocca il PDF)
+    api('archivia-pdf', { method: 'POST', body: { id: curId, filename: fname, pdf_base64: doc.output('datauristring').split(',')[1] } })
+      .then(() => showMsg(`Preventivo ${$('f-num').value} salvato, PDF generato e copiato su Drive`)).catch(() => {});
   } finally { btn.disabled = false; btn.textContent = '📄 Salva e genera PDF'; }
 }
 async function doEmail() {
@@ -691,11 +699,8 @@ function brPreview() {
     <ul style="margin:10px 0 10px 18px;font-size:13px">${lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul>
     ${$('br-p').value ? `<div class="arc-tot">${eur(+$('br-p').value)} <span style="font-size:11px;color:#aaa;font-weight:400">IVA esclusa</span></div>` : ''}`;
 }
-async function imgData(url) { // passa dal proxy /api/img (il bucket S3 non ha CORS)
-  const r = await fetch('/api/img?u=' + encodeURIComponent(url), { credentials: 'same-origin' });
-  if (!r.ok) throw new Error('img');
-  const blob = await r.blob();
-  const data = await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(blob); });
+async function imgData(url) { // la foto passa dal backend (il bucket S3 non ha CORS) e viene ridimensionata
+  const data = (await api('img?u=' + encodeURIComponent(url))).dataUrl;
   // ridimensiona e comprime (le foto originali arrivano a 2000 px e gonfiano il PDF a decine di MB)
   const im = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = data; });
   const k = Math.min(1, 1000 / Math.max(im.naturalWidth, im.naturalHeight));

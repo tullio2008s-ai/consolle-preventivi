@@ -1,5 +1,7 @@
 .env
 node_modules/
-.vercel/
 data/
+apps-script/Seed.gs
+.clasp.json
+.clasprc.json
 .DS_Store

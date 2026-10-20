@@ -4,12 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --env-file=.env scripts/dev-server.mjs",
-    "crea-utente": "node --env-file=.env scripts/crea-utente.mjs",
-    "seed": "node scripts/seed.mjs"
+    "dev": "node scripts/dev-server.mjs",
+    "test": "node scripts/test-backend.mjs",
+    "genera-seed": "node --env-file=.env scripts/genera-seed.mjs",
+    "carica-dati": "node --env-file=.env scripts/carica-dati.mjs"
   },
-  "dependencies": {
-    "@supabase/supabase-js": "^2.45.0"
-  },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  }
 }
