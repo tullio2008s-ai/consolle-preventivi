@@ -3,9 +3,14 @@
 import { readFileSync } from 'node:fs';
 const API = process.argv[2] || 'http://localhost:3000/api';
 const { INIT_EMAIL, INIT_PASSWORD } = process.env;
+// Apps Script risponde al POST con un 302 verso l'indirizzo del risultato: lo seguo a mano (con GET).
 const post = async (path, body, token, method = 'POST') => {
-  const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ path, method, query: {}, body, token }) });
-  const j = await r.json(); if (j.error) throw new Error(path + ': ' + j.error); return j.data;
+  const init = { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'manual',
+    body: JSON.stringify({ path, method, query: {}, body, token }) };
+  let r = await fetch(API, init);
+  if (r.status >= 300 && r.status < 400) r = await fetch(r.headers.get('location'));
+  const t = await r.text(); let j; try { j = JSON.parse(t); } catch { throw new Error(path + ': risposta non valida: ' + t.slice(0, 120)); }
+  if (j.error) throw new Error(path + ': ' + j.error); return j.data;
 };
 const rd = f => JSON.parse(readFileSync(new URL('../data/' + f, import.meta.url), 'utf8'));
 const chunk = (a, n) => Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n));
