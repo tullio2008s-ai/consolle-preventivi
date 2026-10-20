@@ -24,12 +24,20 @@ const setToken = t => { TOKEN = t || ''; try { t ? localStorage.setItem('gs_toke
 
 async function api(path, opts = {}) {
   const [p, qs] = path.split('?');
-  // text/plain evita la richiesta preliminare CORS, che Apps Script non gestisce
-  const r = await fetch(API_URL, {
-    method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ path: p, method: opts.method || 'GET', query: Object.fromEntries(new URLSearchParams(qs || '')), body: opts.body, token: TOKEN }),
-  });
-  const out = await r.json().catch(() => ({ error: 'Risposta non valida dal server', status: 502 }));
+  const method = opts.method || 'GET';
+  const tentativi = (method === 'GET' || p === 'login') ? 3 : 1; // solo letture e login si ritentano: nessun effetto collaterale
+  const body = JSON.stringify({ path: p, method, query: Object.fromEntries(new URLSearchParams(qs || '')), body: opts.body, token: TOKEN });
+  let out;
+  for (let t = 1; t <= tentativi; t++) {
+    try {
+      // text/plain evita la richiesta preliminare CORS, che Apps Script non gestisce
+      const r = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body });
+      out = await r.json(); break;
+    } catch (e) { // a volte Google risponde con una pagina di errore invece del JSON
+      if (t < tentativi) await new Promise(res => setTimeout(res, 1200 * t));
+      else out = { error: tentativi > 1 ? 'Il server non risponde: riprova tra qualche istante' : "Risposta non ricevuta dal server: controlla l'archivio prima di ripetere l'operazione", status: 502 };
+    }
+  }
   if (out.error) {
     if (out.status === 401 && p !== 'password' && p !== 'login') { setToken(''); showLogin(); throw new Error('Sessione scaduta: accedi di nuovo'); }
     throw new Error(out.error);
