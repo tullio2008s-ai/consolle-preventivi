@@ -66,7 +66,7 @@ async function doLogin() {
   } catch (e) { $('login-err').textContent = e.message; $('lg-pw').select(); }
   finally { btn.disabled = false; btn.textContent = 'Accedi'; }
 }
-function doLogout() { setToken(''); location.reload(); }
+function doLogout() { setToken(''); try { localStorage.removeItem(CACHE_KEY); } catch (e) {} location.reload(); }
 function openPw() { ['pw-old', 'pw-new', 'pw-new2'].forEach(i => $(i).value = ''); $('pw-err').textContent = ''; $('pw-modal').classList.add('on'); $('pw-old').focus(); }
 function closePw() { $('pw-modal').classList.remove('on'); }
 async function savePw() {
@@ -92,14 +92,46 @@ async function start(user, showExit) {
   if (started) return; started = true;
   $('f-date').value = new Date().toISOString().slice(0, 10);
   addItem();
-  try {
-    [PRODS, CLIS] = await Promise.all([api('prodotti'), api('clienti')]);
-    PRODS.forEach(p => p._n = norm(p.sku + ' ' + p.nome + ' ' + p.descrizione + ' ' + p.categoria));
-    CLIS.forEach(c => c._n = norm(c.azienda + ' ' + c.referente + ' ' + c.citta));
-    $('tip-cnt').innerHTML = `Catalogo: <b>${PRODS.length} prodotti</b> — Rubrica: <b>${CLIS.length} clienti</b>.`;
-    $('pcat').innerHTML = '<option value="">Tutte le categorie</option>' + [...new Set(PRODS.map(p => p.categoria))].sort().map(c => `<option>${esc(c)}</option>`).join('');
-  } catch (e) { fail(e); }
+  // 1) subito i dati salvati nel browser (se ci sono), 2) poi aggiornamento dal server in background
+  const cache = leggiCache();
+  if (cache) applicaDati(cache.prodotti, cache.clienti);
+  else catalogoCaricamento(true);
   showTab('dashboard');
+  caricaDati();
+}
+
+const CACHE_KEY = 'gs_dati_v1';
+function leggiCache() { try { const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); return c && c.prodotti && c.clienti ? c : null; } catch (e) { return null; } }
+function salvaCache() {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ prodotti: PRODS.map(({ _n, ...p }) => p), clienti: CLIS.map(({ _n, ...c }) => c) })); } catch (e) { /* memoria piena: si va avanti senza */ }
+}
+function applicaDati(prodotti, clienti) {
+  PRODS = prodotti; CLIS = clienti;
+  PRODS.forEach(p => p._n = norm(p.sku + ' ' + p.nome + ' ' + p.descrizione + ' ' + p.categoria));
+  CLIS.forEach(c => c._n = norm(c.azienda + ' ' + c.referente + ' ' + c.citta));
+  $('tip-cnt').innerHTML = `Catalogo: <b>${PRODS.length} prodotti</b> — Rubrica: <b>${CLIS.length} clienti</b>.`;
+  const cat = $('pcat').value;
+  $('pcat').innerHTML = '<option value="">Tutte le categorie</option>' + [...new Set(PRODS.map(p => p.categoria))].sort().map(c => `<option>${esc(c)}</option>`).join('');
+  $('pcat').value = cat;
+  catalogoCaricamento(false);
+}
+function catalogoCaricamento(on, errore) {
+  const b = $('load-bar'); if (!b) return;
+  b.style.display = on || errore ? 'block' : 'none';
+  b.innerHTML = errore
+    ? `⚠️ ${esc(errore)} <button class="abtn" style="margin-left:8px" onclick="caricaDati()">Riprova</button>`
+    : '⏳ Caricamento di catalogo e rubrica in corso… (alcuni secondi, la ricerca prodotti sarà disponibile subito dopo)';
+}
+let caricando = false;
+async function caricaDati() {
+  if (caricando) return; caricando = true;
+  if (!PRODS.length) catalogoCaricamento(true);
+  try {
+    // in sequenza: Apps Script gestisce male molte richieste contemporanee
+    const prodotti = await api('prodotti'), clienti = await api('clienti');
+    applicaDati(prodotti, clienti); salvaCache();
+  } catch (e) { if (!PRODS.length) catalogoCaricamento(false, e.message); else fail(e); }
+  finally { caricando = false; }
 }
 
 const TABS = ['dashboard', 'nuovo', 'archivio', 'clienti', 'prodotti', 'brochure'];
@@ -260,7 +292,7 @@ async function saveClientNow() {
     const i = CLIS.findIndex(x => x.id === s.id); if (i >= 0) CLIS[i] = s; else CLIS.push(s);
     $('cdrop').classList.remove('on');
     $('cli-badge').style.display = 'inline-block'; $('cli-badge').dataset.id = s.id;
-    showMsg('Cliente salvato in rubrica');
+    salvaCache(); showMsg('Cliente salvato in rubrica');
   } catch (e) { fail(e); }
 }
 document.addEventListener('click', e => { if (!e.target.closest('.crel')) $('cdrop').classList.remove('on'); });
@@ -328,7 +360,7 @@ function onSI(idx, val) {
 function trigS(idx) { const q = $('sq-' + idx).value; showSRes(idx, q.trim() ? searchP(q) : PRODS.slice(0, 8)); }
 function showSRes(idx, rs) {
   const d = $('sdr-' + idx);
-  if (!rs.length) { d.innerHTML = '<div class="sitem err"><div class="siname" style="color:#cc0000">Nessun prodotto trovato — compila manualmente</div></div>'; d.classList.add('on'); return; }
+  if (!rs.length) { d.innerHTML = '<div class="sitem err"><div class="siname" style="color:#cc0000">' + (PRODS.length ? 'Nessun prodotto trovato — compila manualmente' : 'Catalogo ancora in caricamento: riprova tra qualche secondo') + '</div></div>'; d.classList.add('on'); return; }
   d.innerHTML = `<div class="scnt">${rs.length} prodott${rs.length > 1 ? 'i trovati' : 'o trovato'}</div>`
     + rs.map(p => `<div class="sitem" data-sku="${esc(p.sku)}">${p.foto_url ? `<img class="sthumb" src="${esc(p.foto_url)}" loading="lazy" onerror="this.outerHTML='<div class=sph>No foto</div>'">` : '<div class="sph">No<br>foto</div>'}
       <div style="flex:1;min-width:0"><div class="siname"><span class="sisku">${esc(p.sku)}</span>${esc(p.nome)}</div><div class="sidesc">${esc(p.descrizione)}</div></div>
@@ -611,12 +643,12 @@ async function saveCliModal() {
     const s = await api('clienti', { method: 'POST', body: c });
     s._n = norm(s.azienda + ' ' + s.referente + ' ' + s.citta);
     const i = CLIS.findIndex(x => x.id === s.id); if (i >= 0) CLIS[i] = s; else CLIS.unshift(s);
-    renderCli(); closeCliModal(); showMsg('Cliente salvato');
+    renderCli(); closeCliModal(); salvaCache(); showMsg('Cliente salvato');
   } catch (e) { fail(e); }
 }
 async function delCli(id) {
   if (!confirm('Eliminare il cliente? I preventivi già fatti restano intatti.')) return;
-  try { await api('clienti?id=' + id, { method: 'DELETE' }); CLIS = CLIS.filter(c => c.id !== id); renderCli(); showMsg('Cliente eliminato'); }
+  try { await api('clienti?id=' + id, { method: 'DELETE' }); CLIS = CLIS.filter(c => c.id !== id); renderCli(); salvaCache(); showMsg('Cliente eliminato'); }
   catch (e) { fail(e); }
 }
 const mapCol = (row, ks) => { for (const k of ks) for (const rk of Object.keys(row)) if (norm(rk).includes(norm(k))) return String(row[rk] ?? '').trim(); return ''; };
@@ -637,7 +669,7 @@ function importCli(inp) {
     const have = new Set(CLIS.map(c => norm(c.azienda + c.referente).replace(/\s+/g, '')));
     const nuovi = cl.filter(c => !have.has(norm(c.azienda + c.referente).replace(/\s+/g, '')));
     if (!nuovi.length) return showMsg('Tutti i clienti sono già in rubrica');
-    try { await api('clienti', { method: 'POST', body: nuovi }); CLIS = await api('clienti'); CLIS.forEach(c => c._n = norm(c.azienda + ' ' + c.referente + ' ' + c.citta)); renderCli(); showMsg(`${nuovi.length} nuovi clienti importati (${cl.length - nuovi.length} già presenti)`); }
+    try { await api('clienti', { method: 'POST', body: nuovi }); CLIS = await api('clienti'); CLIS.forEach(c => c._n = norm(c.azienda + ' ' + c.referente + ' ' + c.citta)); renderCli(); salvaCache(); showMsg(`${nuovi.length} nuovi clienti importati (${cl.length - nuovi.length} già presenti)`); }
     catch (e) { fail(e); }
   });
 }
@@ -661,7 +693,7 @@ function renderProd() {
 }
 async function delProd(sku) {
   if (!confirm('Rimuovere il prodotto dal catalogo? (I preventivi già fatti restano intatti)')) return;
-  try { await api('prodotti?sku=' + encodeURIComponent(sku), { method: 'DELETE' }); PRODS = PRODS.filter(p => p.sku !== sku); renderProd(); showMsg('Prodotto rimosso'); }
+  try { await api('prodotti?sku=' + encodeURIComponent(sku), { method: 'DELETE' }); PRODS = PRODS.filter(p => p.sku !== sku); renderProd(); salvaCache(); showMsg('Prodotto rimosso'); }
   catch (e) { fail(e); }
 }
 function importProd(inp) {
@@ -676,7 +708,7 @@ function importProd(inp) {
     try {
       await api('prodotti', { method: 'POST', body: ps });
       PRODS = await api('prodotti'); PRODS.forEach(p => p._n = norm(p.sku + ' ' + p.nome + ' ' + p.descrizione + ' ' + p.categoria));
-      renderProd(); showMsg(`${ps.length} prodotti importati/aggiornati`);
+      renderProd(); salvaCache(); showMsg(`${ps.length} prodotti importati/aggiornati`);
     } catch (e) { fail(e); }
   });
 }

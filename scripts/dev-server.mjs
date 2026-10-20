@@ -22,6 +22,9 @@ http.createServer(async (req, res) => {
     let out; try { out = be.call(JSON.parse(raw)); } catch (e) { out = { error: 'Errore del server di prova: ' + e.message, status: 500 }; }
     res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify(out));
   }
+  if (u.pathname === '/config.js') { // in prova il sito parla con questo server, non con il backend vero su Google
+    res.writeHead(200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' }); return res.end("window.API_URL = '/api';\n");
+  }
   const f = join(site, u.pathname === '/' ? 'index.html' : decodeURIComponent(u.pathname));
   if (!f.startsWith(site) || !existsSync(f)) { res.writeHead(404); return res.end('404'); }
   res.writeHead(200, { 'Content-Type': MIME[extname(f)] || 'application/octet-stream', 'Cache-Control': 'no-store' }); res.end(readFileSync(f));
