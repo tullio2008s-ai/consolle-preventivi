@@ -1,8 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 import { sessionUser } from './_auth.js';
 
+// Accetta sia i nomi scelti da noi sia quelli creati dall'integrazione Supabase di Vercel.
 export const db = () =>
-  createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY, { auth: { persistSession: false } });
+  createClient(
+    process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY,
+    { auth: { persistSession: false } });
 
 export { sign, verify, sessionUser } from './_auth.js';
 

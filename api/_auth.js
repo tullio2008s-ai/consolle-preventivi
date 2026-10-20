@@ -16,13 +16,17 @@ export function checkPassword(pw, stored) {
 export const passwordOk = pw => typeof pw === 'string' && pw.length >= 10 && pw.length <= 200;
 
 // ── sessione: cookie firmato HMAC ──
-const mac = body => crypto.createHmac('sha256', process.env.SESSION_SECRET || '').update(body).digest('base64url');
+// SESSION_SECRET se presente; altrimenti derivato dalla chiave di servizio Supabase (così non serve inserirne un'altra a mano).
+const secret = () => process.env.SESSION_SECRET ||
+  (process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
+    ? crypto.createHash('sha256').update('sess:' + (process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)).digest('hex') : '');
+const mac = body => crypto.createHmac('sha256', secret()).update(body).digest('base64url');
 export function sign(payload) {
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
   return body + '.' + mac(body);
 }
 export function verify(tok) {
-  if (!tok || !process.env.SESSION_SECRET) return null;
+  if (!tok || !secret()) return null;
   const [body, sig] = tok.split('.');
   if (!body || !sig) return null;
   const a = Buffer.from(sig), b = Buffer.from(mac(body));
