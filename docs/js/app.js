@@ -454,135 +454,136 @@ function buildPDF() {
     ce = $('f-ce').value, cp = $('f-cp').value, sn = $('f-sn').value;
   const t = totals(), sc = t.sc, st = t.st, gI = t.imponibile, gV = t.iva, gT = t.totale;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const W = 210, M = 14; let y = 0;
-
-  // HEADER
-  doc.setFillColor(255, 255, 255); doc.rect(0, 0, W, 38, 'F');
-  doc.setFillColor(204, 0, 0); doc.rect(0, 35, W, 3, 'F');
-  try { if (LOGO) doc.addImage(LOGO, 'PNG', M, 8, 58, 9.9); } catch (e) {}
-  const cx = W / 2;
-  doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(30, 30, 30);
-  doc.text('commerciale@gettoniere-shop.it', cx, 11, { align: 'center' });
-  doc.setFontSize(8.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(80, 80, 80);
-  doc.text('Tel. 340 0069549  |  www.gettoniere-shop.it', cx, 18, { align: 'center' });
-  doc.setDrawColor(220, 220, 220); doc.setLineWidth(0.3); doc.line(cx - 42, 21, cx + 42, 21); doc.setLineWidth(0.2);
-  doc.setFillColor(204, 0, 0); doc.roundedRect(W - 58, 2, 44, 30, 3, 3, 'F');
-  doc.setTextColor(255, 255, 255); doc.setFontSize(8); doc.setFont('helvetica', 'bold');
-  doc.text('PREVENTIVO', W - 36, 10, { align: 'center' });
-  doc.setFontSize(7.5); doc.setFont('helvetica', 'normal'); doc.text(num, W - 36, 17, { align: 'center' });
-  doc.setFontSize(7); doc.text('Data: ' + date, W - 36, 23, { align: 'center' });
-  doc.setFontSize(6.5); doc.text('Valido: ' + valid, W - 36, 29, { align: 'center' });
-  y = 41;
-
-  // BOX CLIENTE + CONDIZIONI
-  doc.setFillColor(250, 250, 250); doc.setDrawColor(235, 235, 235);
-  doc.roundedRect(M, y, 82, 50, 2, 2, 'FD'); doc.roundedRect(M + 86, y, 98, 50, 2, 2, 'FD');
-  doc.setFillColor(204, 0, 0);
-  doc.roundedRect(M, y, 82, 7, 2, 2, 'F'); doc.rect(M, y + 3, 82, 4, 'F');
-  doc.roundedRect(M + 86, y, 98, 7, 2, 2, 'F'); doc.rect(M + 86, y + 3, 98, 4, 'F');
-  doc.setFontSize(5.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
-  doc.text('DESTINATARIO', M + 3, y + 5); doc.text('CONDIZIONI COMMERCIALI', M + 89, y + 5);
-  doc.setFontSize(7); doc.setTextColor(30, 30, 30);
-  [co, co !== cn ? cn : '', ca, cit, cv ? 'P.IVA: ' + cv : '', ce, cp].filter(Boolean).slice(0, 7).forEach((l, i) => {
-    doc.setFont('helvetica', i <= 1 ? 'bold' : 'normal'); doc.text(l.slice(0, 33), M + 3, y + 13 + i * 5.2);
-  });
-  [['Pagamento:', pay], ['Consegna:', delivery ? delivery + ' gg lav.' : 'Da concordare'], ['Resa:', resa || 'Da concordare'],
-    ['Garanzia:', gar || 'Come da legge'], ["Validita':", valid], ['Spedizione:', sc > 0 ? sn : 'Da concordare']].forEach(([lb, v], i) => {
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(5.5); doc.setTextColor(150, 150, 150); doc.text(lb, M + 89, y + 13 + i * 6.6);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(30, 30, 30); doc.text(String(v).slice(0, 52), M + 106, y + 13 + i * 6.6);
-  });
-  y += 55;
-
-  // TABELLA
-  const tableHead = () => {
-    doc.setFillColor(30, 30, 30); doc.rect(M, y, W - M * 2, 7, 'F');
-    doc.setTextColor(255, 255, 255); doc.setFontSize(5.5); doc.setFont('helvetica', 'bold');
-    doc.text('Cod.', C.cod, y + 4.8); doc.text('Descrizione', C.dsc, y + 4.8); doc.text("Q.ta'", C.qty + 3, y + 4.8, { align: 'center' });
-    doc.text('Prezzo', C.prc, y + 4.8); doc.text('Sc.%', C.dis, y + 4.8); doc.text('Impon.', C.imp, y + 4.8);
-    doc.text('IVA', C.iva, y + 4.8); doc.text('Totale', C.tot, y + 4.8); y += 8;
+  const W = 210, M = 15, R = W - M, BOT = 272;
+  const NAVY = [11, 53, 96], CYAN = [31, 169, 214], ORANGE = [245, 166, 35], GREY = [107, 114, 128],
+    INK = [31, 41, 55], LINE = [209, 213, 219], PALE = [237, 245, 250];
+  const fill = c => doc.setFillColor(c[0], c[1], c[2]), ink = c => doc.setTextColor(c[0], c[1], c[2]), stroke = c => doc.setDrawColor(c[0], c[1], c[2]);
+  const font = (st, sz) => { doc.setFont('helvetica', st); doc.setFontSize(sz); };
+  const eu = n => new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
+  // jsPDF non conosce la larghezza del glifo €: lo disegno a parte, accanto alla cifra
+  const euR = (n, x, yy) => { const s = eu(n); doc.text(s, x, yy, { align: 'right' }); doc.text('€', x - doc.getTextWidth(s) - (0.3 + doc.getFontSize() * 0.045), yy, { align: 'right' }); };
+  const dLong = new Date($('f-date').value + 'T12:00:00');
+  const longDate = isNaN(dLong) ? date : dLong.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' });
+  const fname = `Preventivo_${num}_${(co || cn || 'cliente').replace(/[^\w]+/g, '_')}.pdf`;
+  let y = 0;
+  const need = h => { if (y + h > BOT) { doc.addPage(); y = 20; return true; } return false; };
+  const section = title => {
+    need(16); fill(CYAN); doc.rect(M, y, 1.6, 6.5, 'F');
+    ink(NAVY); font('bold', 12); doc.text(title, M + 4.5, y + 5); y += 11;
   };
-  const C = { ph: M + 0.5, cod: M + 12, dsc: M + 28, qty: M + 97, prc: M + 107, dis: M + 122, imp: M + 134, iva: M + 149, tot: M + 159 };
+
+  // INTESTAZIONE
+  try { if (LOGO) doc.addImage(LOGO, 'PNG', M, 12, 62, 10.5); } catch (e) {}
+  ink(NAVY); font('bold', 19); doc.text('PREVENTIVO', R, 18, { align: 'right' });
+  ink(INK); font('normal', 10); doc.text(`${num} - ${longDate}`, R, 25, { align: 'right' });
+  ink(GREY); font('normal', 8.5); doc.text(`Offerta valida ${valid}`, R, 30.5, { align: 'right' });
+  stroke(NAVY); doc.setLineWidth(0.8); doc.line(M, 36, R, 36); doc.setLineWidth(0.2);
+  y = 45;
+
+  // DESTINATARIO
+  const nome = co || cn;
+  const righe = [co && cn && cn !== co ? 'Alla c.a. ' + cn : '', [ca, cit].filter(Boolean).join(' - '),
+    cv ? 'P.IVA / C.F.: ' + cv : '', [ce, cp].filter(Boolean).join('  -  ')].filter(Boolean);
+  const bh = 15 + righe.length * 4.8;
+  fill(PALE); doc.rect(M, y, W - M * 2, bh, 'F'); fill(NAVY); doc.rect(M, y, 1.8, bh, 'F');
+  ink(GREY); font('bold', 7); doc.text('DESTINATARIO', M + 7, y + 6);
+  ink(NAVY); font('bold', 12); doc.text(String(nome).slice(0, 70), M + 7, y + 12.5);
+  ink(INK); font('normal', 8.5); righe.forEach((l, i) => doc.text(l.slice(0, 100), M + 7, y + 18 + i * 4.8));
+  y += bh + 8;
+
+  // DETTAGLIO FORNITURA
+  section('Dettaglio della fornitura');
+  const C = { cod: M + 1, dsc: M + 25, qty: 110, prc: 130, dis: 143, imp: 162, iva: 174, tot: R - 1 };
+  const tableHead = () => {
+    ink(GREY); font('bold', 7.5);
+    doc.text('Cod.', C.cod, y); doc.text('Descrizione', C.dsc, y);
+    doc.text('Q.tà', C.qty, y, { align: 'right' }); doc.text('Prezzo', C.prc, y, { align: 'right' });
+    doc.text('Sc.%', C.dis, y, { align: 'right' }); doc.text('Imponibile', C.imp, y, { align: 'right' });
+    doc.text('IVA', C.iva, y, { align: 'right' }); doc.text('Totale', C.tot, y, { align: 'right' });
+    stroke(LINE); doc.line(M, y + 2.2, R, y + 2.2); y += 7;
+  };
   tableHead();
-  items.forEach((it, i) => {
+  items.forEach(it => {
     const tt = calcRow(it);
-    const dLns = doc.splitTextToSize(it.descrizione || '—', 57);
-    const nLns = it.nota ? doc.splitTextToSize('- ' + it.nota, 57) : [];
-    const rH = Math.max(dLns.length * 4.6 + (nLns.length ? nLns.length * 4 + 2 : 0) + 7, 14);
-    if (y + rH > 268) { doc.addPage(); y = 14; tableHead(); }
-    const g = i % 2 === 0 ? 255 : 247;
-    doc.setFillColor(g, g, g); doc.rect(M, y, W - M * 2, rH, 'F');
-    doc.setFillColor(204, 0, 0); doc.rect(M, y, 1.5, rH, 'F');
-    doc.setDrawColor(235, 235, 235); doc.line(M + 1.5, y + rH, W - M, y + rH);
+    font('normal', 8);
+    const dLns = doc.splitTextToSize(it.descrizione || '—', 62);
+    font('italic', 7); const nLns = it.nota ? doc.splitTextToSize(it.nota, 62) : [];
+    const rH = Math.max(dLns.length * 4 + nLns.length * 3.5 + 4, it.foto_url ? 11 : 8);
+    if (need(rH + 4)) tableHead();
+    ink(NAVY); font('bold', 8); doc.text((it.sku || '—').slice(0, 11), C.cod, y);
     if (it.foto_url) {
-      const lx = C.ph + 0.5, ly = y + rH / 2 + 1.5;
-      doc.setFontSize(6); doc.setFont('helvetica', 'bolditalic'); doc.setTextColor(0, 90, 200);
-      doc.textWithLink('> vedi', lx, ly, { url: SITE + '/search?q=' + encodeURIComponent(it.sku || '') });
-      const tw = doc.getTextWidth('> vedi'); doc.setDrawColor(0, 90, 200); doc.line(lx, ly + 0.5, lx + tw, ly + 0.5);
+      font('normal', 6.5); ink(CYAN);
+      doc.textWithLink('vedi scheda', C.cod, y + 3.6, { url: SITE + '/search?q=' + encodeURIComponent(it.sku || '') });
     }
-    const mY = y + rH / 2 + 1.5;
-    doc.setTextColor(40, 40, 40); doc.setFontSize(6.5); doc.setFont('helvetica', 'normal');
-    doc.text((it.sku || '—').slice(0, 9), C.cod, y + 5.5);
-    dLns.forEach((l, li) => doc.text(l, C.dsc, y + 5.5 + li * 4.6));
-    if (nLns.length) {
-      doc.setFont('helvetica', 'italic'); doc.setFontSize(6); doc.setTextColor(160, 160, 160);
-      nLns.forEach((l, li) => doc.text(l, C.dsc, y + 5.5 + dLns.length * 4.6 + 2 + li * 4));
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(40, 40, 40);
-    }
-    doc.text(String(it.quantita || 0), C.qty + 3, mY, { align: 'center' });
-    doc.text(it.prezzo_unit ? 'E ' + fmt(it.prezzo_unit) : '—', C.prc, mY);
-    doc.text(it.sconto_pct ? it.sconto_pct + '%' : '—', C.dis, mY);
-    doc.text('E ' + fmt(tt.imp), C.imp, mY); doc.text(it.iva_pct + '%', C.iva, mY);
-    doc.setFont('helvetica', 'bold'); doc.setTextColor(204, 0, 0); doc.text('E ' + fmt(tt.tot), C.tot, mY);
-    y += rH;
+    ink(INK); font('normal', 8); dLns.forEach((l, li) => doc.text(l, C.dsc, y + li * 4));
+    if (nLns.length) { ink(GREY); font('italic', 7); nLns.forEach((l, li) => doc.text(l, C.dsc, y + dLns.length * 4 + 0.5 + li * 3.5)); }
+    ink(INK); font('normal', 8);
+    doc.text(String(it.quantita || 0), C.qty, y, { align: 'right' });
+    if (it.prezzo_unit) euR(it.prezzo_unit, C.prc, y); else doc.text('—', C.prc, y, { align: 'right' });
+    doc.text(it.sconto_pct ? it.sconto_pct + '%' : '—', C.dis, y, { align: 'right' });
+    euR(tt.imp, C.imp, y); doc.text(it.iva_pct + '%', C.iva, y, { align: 'right' });
+    ink(NAVY); font('bold', 8); euR(tt.tot, C.tot, y);
+    stroke(LINE); doc.line(M, y + rH - 3, R, y + rH - 3); y += rH + 1;
   });
   if (sc > 0) {
-    if (y + 10 > 268) { doc.addPage(); y = 14; }
-    doc.setFillColor(255, 252, 235); doc.rect(M, y, W - M * 2, 10, 'F');
-    doc.setFillColor(180, 150, 0); doc.rect(M, y, 1.5, 10, 'F');
-    doc.setDrawColor(220, 200, 130); doc.line(M + 1.5, y + 10, W - M, y + 10);
-    const mY = y + 6; doc.setTextColor(100, 80, 0); doc.setFont('helvetica', 'italic'); doc.setFontSize(6.5);
-    doc.text('TRASP', C.cod, mY); doc.text(sn || 'Spedizione', C.dsc, mY); doc.text('1', C.qty, mY); doc.text('E ' + fmt(sc), C.prc, mY);
-    doc.text('—', C.dis, mY); doc.text('E ' + fmt(sc), C.imp, mY); doc.text('22%', C.iva, mY);
-    doc.setFont('helvetica', 'bold'); doc.setTextColor(180, 140, 0); doc.text('E ' + fmt(st), C.tot, mY);
-    y += 10;
+    need(10);
+    ink(GREY); font('bold', 8); doc.text('TRASP', C.cod, y);
+    ink(INK); font('normal', 8); doc.text((sn || 'Spedizione').slice(0, 45), C.dsc, y);
+    doc.text('1', C.qty, y, { align: 'right' }); euR(sc, C.prc, y); doc.text('—', C.dis, y, { align: 'right' });
+    euR(sc, C.imp, y); doc.text('22%', C.iva, y, { align: 'right' });
+    ink(NAVY); font('bold', 8); euR(st, C.tot, y);
+    stroke(LINE); doc.line(M, y + 3.4, R, y + 3.4); y += 8;
   }
-  if (y + 52 > 276) { doc.addPage(); y = 14; }
-  doc.setDrawColor(204, 0, 0); doc.setLineWidth(0.6); doc.line(M, y + 2, W - M, y + 2); doc.setLineWidth(0.2);
-  y += 8;
+  y += 3;
 
   // TOTALI
-  doc.setFillColor(25, 25, 25); doc.roundedRect(W - M - 80, y, 80, 43, 3, 3, 'F');
-  doc.setTextColor(150, 150, 150); doc.setFontSize(7); doc.setFont('helvetica', 'normal');
-  doc.text('Imponibile:', W - M - 75, y + 10); doc.text('IVA:', W - M - 75, y + 19);
-  doc.setTextColor(220, 220, 220);
-  doc.text('E ' + fmt(gI), W - M - 5, y + 10, { align: 'right' }); doc.text('E ' + fmt(gV), W - M - 5, y + 19, { align: 'right' });
-  doc.setFillColor(204, 0, 0); doc.rect(W - M - 80, y + 24, 80, 19, 'F');
-  doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
-  doc.text('TOTALE IVA INCLUSA', W - M - 75, y + 32); doc.setFontSize(12); doc.text('E ' + fmt(gT), W - M - 5, y + 40, { align: 'right' });
+  need(36);
+  const lx = 118;
+  ink(GREY); font('normal', 9); doc.text('Imponibile', lx, y); doc.text('IVA', lx, y + 6.5);
+  ink(INK); euR(gI, R - 1, y); euR(gV, R - 1, y + 6.5);
+  y += 11;
+  fill(NAVY); doc.rect(M, y, W - M * 2, 13, 'F'); fill(ORANGE); doc.rect(M, y, 3.5, 13, 'F');
+  ink([255, 255, 255]); font('bold', 11); doc.text('TOTALE IVA INCLUSA', M + 9, y + 8.4);
+  font('bold', 15); euR(gT, R - 6, y + 8.8);
+  y += 17.5;
+  ink(GREY); font('italic', 7.5);
+  doc.text('Prezzi unitari e importi di riga IVA esclusa; il totale finale comprende l\'IVA.', M, y); y += 9;
 
+  // CONDIZIONI DI VENDITA
+  section('Condizioni di vendita');
+  const cond = [['Pagamento:', pay], ['Consegna:', delivery ? delivery + ' giorni lavorativi' : 'da concordare'], ['Resa:', resa || 'da concordare'],
+    ['Garanzia:', gar || 'come da legge'], ['Validità offerta:', valid], ['Spedizione:', sc > 0 ? sn : 'da concordare']];
+  const half = Math.ceil(cond.length / 2), CW = 83;
+  need(30);
+  let colH = [0, 0];
+  cond.forEach(([lb, v], i) => {
+    const col = i < half ? 0 : 1, x = M + col * (CW + 14), yy = y + colH[col];
+    font('normal', 8.5); const ls = doc.splitTextToSize(`${lb} ${v}`, CW - 4);
+    fill(CYAN); doc.circle(x + 1.1, yy - 1, 0.8, 'F');
+    ink(INK); font('bold', 8.5); doc.text(lb, x + 4, yy);
+    font('bold', 8.5); const lw = doc.getTextWidth(lb + ' '); font('normal', 8.5);
+    doc.text(ls[0].slice(lb.length).trim(), x + 4 + lw, yy);
+    ls.slice(1).forEach((l, li) => doc.text(l, x + 4, yy + (li + 1) * 4.2));
+    colH[col] += ls.length * 4.2 + 2.2;
+  });
+  y += Math.max(colH[0], colH[1]) + 4;
+
+  // NOTE
   if (notes.trim()) {
-    const nl = doc.splitTextToSize(notes, (W - M * 2) - 100 > 60 ? 90 : 90);
-    const nh = Math.min(nl.length * 5 + 10, 43);
-    doc.setFillColor(255, 253, 235); doc.setDrawColor(255, 210, 0); doc.roundedRect(M, y, 92, nh, 2, 2, 'FD');
-    doc.setFillColor(255, 190, 0); doc.rect(M, y, 3, nh, 'F');
-    doc.setFontSize(6.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(110, 75, 0); doc.text('NOTE:', M + 5, y + 7);
-    doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 50, 0);
-    nl.slice(0, 7).forEach((l, i) => doc.text(l, M + 5, y + 13 + i * 5));
+    section('Note');
+    ink(INK); font('normal', 8.5);
+    doc.splitTextToSize(notes, W - M * 2).forEach(l => { need(5); doc.text(l, M, y); y += 4.4; });
   }
 
-  // FOOTER su ogni pagina
+  // PIÈ DI PAGINA su ogni pagina
   const pages = doc.getNumberOfPages();
   for (let p = 1; p <= pages; p++) {
     doc.setPage(p);
-    doc.setFillColor(25, 25, 25); doc.rect(0, 278, W, 19, 'F'); doc.setFillColor(204, 0, 0); doc.rect(0, 278, W, 2, 'F');
-    doc.setTextColor(160, 160, 160); doc.setFontSize(5.5); doc.setFont('helvetica', 'normal');
-    doc.text(`Offerta valida per ${valid} dalla data di emissione. Prezzi IVA esclusa salvo diversa indicazione.`, M, 284.5);
-    doc.setTextColor(215, 215, 215); doc.setFontSize(6.5); doc.setFont('helvetica', 'bold');
-    doc.text(FOOT1, M, 289.5);
-    doc.setFont('helvetica', 'normal'); doc.text(FOOT2, M, 294);
-    if (pages > 1) { doc.setTextColor(160, 160, 160); doc.setFontSize(6); doc.text(`${p}/${pages}`, W - M, 294, { align: 'right' }); }
+    stroke(CYAN); doc.setLineWidth(0.5); doc.line(M, 281, R, 281); doc.setLineWidth(0.2);
+    ink(NAVY); font('bold', 8); doc.text(FOOT1, W / 2, 286, { align: 'center' });
+    ink(GREY); font('normal', 8); doc.text(FOOT2, W / 2, 290.5, { align: 'center' });
+    font('normal', 7); doc.text(`${fname} - pag. ${p}/${pages}`, R, 295, { align: 'right' });
   }
-  const fname = `Preventivo_${num}_${(co || cn || 'cliente').replace(/[^\w]+/g, '_')}.pdf`;
   return { doc, fname };
 }
 async function generatePDF() {
