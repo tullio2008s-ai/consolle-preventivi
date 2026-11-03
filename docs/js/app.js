@@ -730,14 +730,66 @@ function brPick(p) {
   $('br-form').style.display = 'block';
   $('br-t').value = p.nome; $('br-sku').value = p.sku; $('br-p').value = p.prezzo > 0 ? p.prezzo : '';
   $('br-d').value = [p.descrizione && p.descrizione !== p.nome ? p.descrizione : '', p.categoria ? 'Categoria: ' + p.categoria : ''].filter(Boolean).join('\n');
-  brPreview();
+  brPreview(); brCarica();
+}
+// Scheda tecnica letta dalla pagina prodotto di gettoniere-shop.it (via backend): dimensioni, peso, caratteristiche
+function schedaToText(s) {
+  const L = [];
+  if (s.intro) L.push('> ' + s.intro);
+  (s.sezioni || []).forEach(sec => {
+    L.push('# ' + sec.titolo);
+    sec.voci.forEach(v => L.push((v.d > 1 ? '- ' : '') + (v.l ? v.l + (v.t ? ': ' + v.t : ':') : v.t)));
+  });
+  return L.join('\n');
+}
+async function brCarica() {
+  if (!brProd) return;
+  const sku = brProd.sku, st = $('br-st'), cat = brProd.prezzo;
+  st.innerHTML = '⏳ Lettura della scheda tecnica dal sito…';
+  try {
+    const s = await api('scheda?sku=' + encodeURIComponent(sku));
+    if (!brProd || brProd.sku !== sku) return;
+    if (!s.trovato) { st.innerHTML = 'Scheda non trovata sul sito: scrivi a mano le caratteristiche.'; return; }
+    $('br-d').value = schedaToText(s); brPreview();
+    st.innerHTML = `✓ Dati letti da <a href="${esc(s.url)}" target="_blank" rel="noopener">gettoniere-shop.it</a>: puoi modificarli prima di creare il PDF.`
+      + (s.prezzo_sito && cat > 0 && Math.abs(s.prezzo_sito - cat) > 0.01 ? `<br><b>⚠ Prezzo sul sito ${eur(s.prezzo_sito)}, nel catalogo ${eur(cat)}</b>: nella brochure vale il campo Prezzo qui sopra.` : '');
+  } catch (e) { st.innerHTML = 'Lettura dal sito non riuscita (' + esc(e.message || e) + '): scrivi a mano le caratteristiche.'; }
+}
+// testo → struttura: "> intro", "# sezione", "Etichetta: testo", "- sotto-punto"
+function brParse(txt) {
+  const out = { intro: '', sezioni: [] }; let sec = null;
+  txt.split('\n').map(l => l.trim()).filter(Boolean).forEach(l => {
+    if (l.startsWith('> ')) { out.intro = (out.intro ? out.intro + ' ' : '') + l.slice(2); return; }
+    if (l.startsWith('# ')) { sec = { titolo: l.slice(2), voci: [] }; out.sezioni.push(sec); return; }
+    if (!sec) { sec = { titolo: 'Caratteristiche', voci: [] }; out.sezioni.push(sec); }
+    const sub = l.startsWith('- '); if (sub) l = l.slice(2);
+    const m = /^([^:]{2,60}):\s*(.*)$/.exec(l);
+    sec.voci.push({ l: m ? m[1] : '', t: m ? m[2] : l, sub });
+  });
+  return out;
+}
+function brFacts(m) { // riquadro "In breve": solo ciò che c'è nel testo
+  const all = m.sezioni.flatMap(s => s.voci), f = [];
+  const dim = all.find(v => /^dimensioni/i.test(v.l));
+  if (dim) {
+    const cut = dim.t.search(/\bPeso\b/i), d = (cut >= 0 ? dim.t.slice(0, cut) : dim.t).replace(/[.\s]+$/, '');
+    const k = d.indexOf(':'), pesoM = /Peso:?\s*([^.]+(?:\.\d+)?)/i.exec(dim.t);
+    f.push({ k: 'DIMENSIONI', v: (k >= 0 ? d.slice(k + 1) : d).trim(), s: k >= 0 && /larghezza.*altezza.*profondit/i.test(d.slice(0, k)) ? 'L × A × P' : '' });
+    if (pesoM) f.push({ k: 'PESO', v: pesoM[1].trim().replace(/[.\s]+$/, ''), s: '' });
+  }
+  if (!f.some(x => x.k === 'PESO')) { const pv = all.find(v => /^peso/i.test(v.l)); if (pv) f.push({ k: 'PESO', v: pv.t.replace(/[.\s]+$/, ''), s: '' }); }
+  const al = all.find(v => /^alimentazione/i.test(v.l)); if (al) f.push({ k: 'ALIMENTAZIONE', v: al.t.replace(/[.\s]+$/, ''), s: '' });
+  const co = all.find(v => /^tempi di consegna/i.test(v.l)); if (co) f.push({ k: 'CONSEGNA', v: co.t.replace(/[.\s]+$/, ''), s: '' });
+  return f.slice(0, 4);
 }
 function brPreview() {
   if (!brProd) return;
-  const lines = $('br-d').value.split('\n').filter(l => l.trim());
-  $('br-prev').innerHTML = `<div style="text-align:center">${brProd.foto_url ? `<img src="${esc(brProd.foto_url)}" style="max-width:100%;max-height:220px;object-fit:contain">` : ''}</div>
-    <h3 style="margin:10px 0 4px;color:#111">${esc($('br-t').value)}</h3><div class="skub">${esc($('br-sku').value)}</div>
-    <ul style="margin:10px 0 10px 18px;font-size:13px">${lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul>
+  const m = brParse($('br-d').value), facts = brFacts(m);
+  $('br-prev').innerHTML = `<div style="text-align:center">${brProd.foto_url ? `<img src="${esc(brProd.foto_url)}" style="max-width:100%;max-height:200px;object-fit:contain">` : ''}</div>
+    <h3 style="margin:10px 0 4px;color:#0b3560">${esc($('br-t').value)}</h3><div class="skub">${esc($('br-sku').value)}</div>
+    ${m.intro ? `<p style="font-size:12.5px;margin:8px 0">${esc(m.intro)}</p>` : ''}
+    ${facts.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0">${facts.map(f => `<div style="background:#edf5fa;padding:6px 9px;border-radius:4px;font-size:11.5px"><div style="font-size:9px;color:#6b7280;font-weight:700">${f.k}</div><b style="color:#0b3560">${esc(f.v)}</b>${f.s ? ` <span style="color:#6b7280;font-size:10px">${f.s}</span>` : ''}</div>`).join('')}</div>` : ''}
+    ${m.sezioni.map(s => `<div style="font-weight:700;color:#0b3560;margin:10px 0 3px;border-left:3px solid #1fa9d6;padding-left:6px">${esc(s.titolo)}</div><ul style="margin:0 0 0 18px;font-size:12px">${s.voci.map(v => `<li style="${v.sub ? 'margin-left:14px;' : ''}">${v.l ? `<b>${esc(v.l)}</b>${v.t ? ': ' : ''}` : ''}${esc(v.t)}</li>`).join('')}</ul>`).join('')}
     ${$('br-p').value ? `<div class="arc-tot">${eur(+$('br-p').value)} <span style="font-size:11px;color:#aaa;font-weight:400">IVA esclusa</span></div>` : ''}`;
 }
 async function imgData(url) { // la foto passa dal backend (il bucket S3 non ha CORS) e viene ridimensionata
@@ -750,12 +802,15 @@ async function imgData(url) { // la foto passa dal backend (il bucket S3 non ha 
   return { data: cv.toDataURL('image/jpeg', 0.85), w: cv.width, h: cv.height, fmt: 'JPEG' };
 }
 async function buildBrochure() {
-  const { jsPDF } = window.jspdf, doc = new jsPDF({ unit: 'mm', format: 'a4' }), W = 210, M = 15, R = W - M;
+  const { jsPDF } = window.jspdf, doc = new jsPDF({ unit: 'mm', format: 'a4' }), W = 210, M = 15, R = W - M, BOT = 272;
   const NAVY = [11, 53, 96], CYAN = [31, 169, 214], ORANGE = [245, 166, 35], GREY = [107, 114, 128], INK = [31, 41, 55], PALE = [237, 245, 250], FR = [209, 213, 219];
   const fill = c => doc.setFillColor(c[0], c[1], c[2]), ink = c => doc.setTextColor(c[0], c[1], c[2]), stroke = c => doc.setDrawColor(c[0], c[1], c[2]);
   const font = (st, sz) => { doc.setFont('helvetica', st); doc.setFontSize(sz); };
   const title = $('br-t').value, sku = $('br-sku').value, price = parseFloat($('br-p').value);
-  const lines = $('br-d').value.split('\n').map(l => l.trim()).filter(Boolean);
+  const mod = brParse($('br-d').value), facts = brFacts(mod);
+  let y = 0;
+  const need = h => { if (y + h > BOT) { doc.addPage(); y = 20; return true; } return false; };
+  const section = t => { need(18); fill(CYAN); doc.rect(M, y, 1.6, 6.5, 'F'); ink(NAVY); font('bold', 12); doc.text(t, M + 4.5, y + 5); y += 11.5; };
   // intestazione
   try { if (LOGO) doc.addImage(LOGO, 'PNG', M, 12, 62, 10.5); } catch (e) {}
   ink(NAVY); font('bold', 19); doc.text('SCHEDA PRODOTTO', R, 18, { align: 'right' });
@@ -763,27 +818,58 @@ async function buildBrochure() {
   stroke(NAVY); doc.setLineWidth(0.8); doc.line(M, 36, R, 36); doc.setLineWidth(0.2);
   // titolo prodotto
   font('bold', 16); const tl = doc.splitTextToSize(title, W - M * 2 - 14);
-  const bh = 9 + tl.length * 7 + 7; let y = 45;
+  const bh = 9 + tl.length * 7 + 7; y = 45;
   fill(PALE); doc.rect(M, y, W - M * 2, bh, 'F'); fill(NAVY); doc.rect(M, y, 1.8, bh, 'F');
   ink(NAVY); font('bold', 16); doc.text(tl, M + 7, y + 10);
-  ink(GREY); font('normal', 9); doc.text('Cod. ' + sku, M + 7, y + 10 + tl.length * 7 - 1); y += bh + 8;
+  ink(GREY); font('normal', 9); doc.text('Cod. ' + sku, M + 7, y + 10 + tl.length * 7 - 1); y += bh + 7;
+  // introduzione
+  if (mod.intro) { ink(INK); font('normal', 9.5); doc.splitTextToSize(mod.intro, W - M * 2).forEach(l => { doc.text(l, M, y); y += 4.8; }); y += 4; }
   // foto
   if (brProd.foto_url) {
     try {
-      const im = await imgData(brProd.foto_url), maxW = W - M * 2, maxH = 95, k = Math.min(maxW / im.w, maxH / im.h);
+      const im = await imgData(brProd.foto_url), maxW = W - M * 2, maxH = mod.intro ? 68 : 80, k = Math.min(maxW / im.w, maxH / im.h);
       const w = im.w * k, h = im.h * k;
+      need(maxH + 12);
       doc.addImage(im.data, im.fmt, M + (maxW - w) / 2, y + 3 + (maxH - h) / 2, w, h);
-      stroke(FR); doc.roundedRect(M, y, maxW, maxH + 6, 2, 2, 'S'); y += maxH + 14;
+      stroke(FR); doc.roundedRect(M, y, maxW, maxH + 6, 2, 2, 'S'); y += maxH + 12;
     } catch (e) { showMsg('Foto non scaricabile: brochure senza immagine', 'warn'); }
   }
-  // caratteristiche
-  if (lines.length) {
-    fill(CYAN); doc.rect(M, y, 1.6, 6.5, 'F'); ink(NAVY); font('bold', 12); doc.text('Caratteristiche', M + 4.5, y + 5); y += 13;
-    ink(INK); font('normal', 10);
-    lines.forEach(l => { doc.splitTextToSize(l, W - M * 2 - 7).forEach((s, i) => { if (y > 262) { doc.addPage(); y = 20; } if (!i) { fill(ORANGE); doc.circle(M + 1.2, y - 1.2, 0.9, 'F'); } doc.text(s, M + 6, y); y += 5.4; }); y += 1.2; });
+  // in breve: dimensioni, peso, alimentazione, consegna (solo se presenti nella scheda)
+  if (facts.length) {
+    const gap = 3, tw = (W - M * 2 - gap * (facts.length - 1)) / facts.length;
+    font('bold', 9); const vl = facts.map(f => doc.splitTextToSize(f.v, tw - 6)), n = Math.max(...vl.map(v => v.length)), th = 10 + n * 4.2 + (facts.some(f => f.s) ? 4 : 0);
+    need(th + 8);
+    facts.forEach((f, i) => {
+      const x = M + i * (tw + gap);
+      fill(PALE); doc.rect(x, y, tw, th, 'F'); fill(ORANGE); doc.rect(x, y, tw, 1, 'F');
+      ink(GREY); font('bold', 6.5); doc.text(f.k, x + 3, y + 5.2);
+      ink(NAVY); font('bold', 9); vl[i].forEach((l, li) => doc.text(l, x + 3, y + 10 + li * 4.2));
+      if (f.s) { ink(GREY); font('normal', 6.5); doc.text(f.s, x + 3, y + 10 + vl[i].length * 4.2 + 0.4); }
+    });
+    y += th + 9;
   }
+  // sezioni della scheda tecnica
+  const bul = (lb, tx, sub, soft) => {
+    const x = M + (sub ? 8 : 1.2), sz = soft ? 8.5 : 9.5, lh = soft ? 4.2 : 4.9, tw = R - (x + 4) - 3;
+    font('normal', sz); const full = lb ? (tx ? lb + ': ' + tx : lb) : tx, ls = doc.splitTextToSize(full, tw);
+    need(ls.length * lh + 2);
+    fill(sub ? CYAN : ORANGE); doc.circle(x, y - 1.2, sub ? 0.6 : 0.85, 'F');
+    if (lb) {
+      ink(soft ? GREY : INK); font('bold', sz); doc.text(lb + (tx ? ':' : ''), x + 4, y);
+      const lw = doc.getTextWidth(lb + (tx ? ': ' : ' ')); font('normal', sz);
+      doc.text(ls[0].slice(lb.length + (tx ? 1 : 0)).trim(), x + 4 + lw, y);
+    } else { ink(soft ? GREY : INK); font('normal', sz); doc.text(ls[0], x + 4, y); }
+    ink(soft ? GREY : INK); font('normal', sz); ls.slice(1).forEach((l, i) => doc.text(l, x + 4, y + (i + 1) * lh));
+    y += ls.length * lh + (soft ? 1.3 : 1.7);
+  };
+  mod.sezioni.forEach(s => {
+    const soft = /avvertenz/i.test(s.titolo);
+    section(/^descrizione del prodotto$/i.test(s.titolo) ? 'Caratteristiche tecniche' : s.titolo);
+    s.voci.forEach(v => bul(v.l, v.t, v.sub, soft));
+    y += 4;
+  });
   if (price > 0) {
-    y += 5; if (y > 250) { doc.addPage(); y = 20; }
+    y += 2; need(20);
     fill(NAVY); doc.rect(M, y, W - M * 2, 14, 'F'); fill(ORANGE); doc.rect(M, y, 3.5, 14, 'F');
     ink([255, 255, 255]); font('bold', 10); doc.text('PREZZO (IVA ESCLUSA)', M + 9, y + 9);
     font('bold', 15); const s = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(price) + ' + IVA';

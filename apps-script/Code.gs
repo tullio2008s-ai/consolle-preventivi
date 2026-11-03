@@ -76,6 +76,7 @@ function route_(req) {
     case 'preventivi': return rPreventivi_(m, q, body, user);
     case 'kpi': return kpi_();
     case 'img': return img_(q.u);
+    case 'scheda': return scheda_(q.sku);
     case 'invia-email': return inviaEmail_(body || {}, user);
     case 'archivia-pdf': return archiviaPdf_(body || {}, user);
   }
@@ -390,6 +391,70 @@ function img_(u) { // il bucket S3 non invia header CORS: la foto passa da qui, 
   var blob = r.getBlob(), bytes = blob.getBytes();
   if (bytes.length > 4000000) fail_(413, 'Foto troppo grande');
   return { dataUrl: 'data:' + (blob.getContentType() || 'image/jpeg') + ';base64,' + Utilities.base64Encode(bytes) };
+}
+
+// ═══════════════ SCHEDA TECNICA DAL SITO ═══════════════
+// Legge dalla pagina prodotto di gettoniere-shop.it (testi scritti da voi): dimensioni, peso, caratteristiche. Niente è inventato.
+var SITO = 'https://www.gettoniere-shop.it';
+function sitoGet_(path) {
+  var r = UrlFetchApp.fetch(SITO + path, { muteHttpExceptions: true, followRedirects: true, headers: { 'User-Agent': 'Mozilla/5.0 (Consolle Preventivi)' } });
+  if (r.getResponseCode() !== 200) fail_(502, 'Il sito non risponde (' + r.getResponseCode() + ')');
+  return r.getContentText();
+}
+function pulisci_(h) {
+  return String(h || '').replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&euro;/g, '€').replace(/&times;/g, '×').replace(/&ndash;/g, '–').replace(/&#(\d+);/g, function (_, n) { return String.fromCharCode(+n); })
+    .replace(/\s+/g, ' ').replace(/\s+([.,;:])/g, '$1').trim();
+}
+function scheda_(sku) {
+  sku = String(sku || '').trim();
+  if (!/^[A-Za-z0-9_.\-]{2,40}$/.test(sku)) fail_(400, 'Codice non valido');
+  var cache = CacheService.getScriptCache(), ck = 'scheda_' + sku, hit = cache.get(ck);
+  if (hit) return JSON.parse(hit);
+  var res = { trovato: false };
+  var s = sitoGet_('/search?q=' + encodeURIComponent(sku)), parts = s.split('{"name_1":'), path = '', prezzo = 0;
+  for (var i = 1; i < parts.length && !path; i++) {
+    if (parts[i].indexOf('u003cem\\u003e' + sku + '\\u003c/em') < 0 && parts[i].indexOf('"code":"' + sku + '"') < 0) continue;
+    var mm = /"permalink_path_1":"([^"]+)"/.exec(parts[i]), pm = /"price":"([0-9.]+)"/.exec(parts[i]);
+    if (mm) { path = mm[1]; prezzo = pm ? parseFloat(pm[1]) : 0; }
+  }
+  if (path && /^\/it\/[a-z0-9\-\/]+$/i.test(path)) {
+    var html = sitoGet_(path), k = html.indexOf('class="product-details"');
+    if (k >= 0) {
+      var blk = html.substr(k, 40000), j = blk.indexOf('</div>'); if (j > 0) blk = blk.substr(0, j);
+      res = parseScheda_(blk); res.url = SITO + path; res.prezzo_sito = prezzo; res.trovato = res.sezioni.length > 0 || !!res.intro;
+    }
+  }
+  if (res.trovato) cache.put(ck, JSON.stringify(res), 21600);
+  return res;
+}
+function parseScheda_(blk) {
+  var out = { titolo: '', intro: '', sezioni: [] }, sez = null, depth = 0, mode = null, buf = '';
+  var toks = blk.split(/(<\/?(?:h2|h3|p|ul|li)\b[^>]*>)/i);
+  function handle() {
+    var t = pulisci_(buf);
+    if (mode && t) {
+      if (mode === 'h2') out.titolo = t;
+      else if (mode === 'h3') { sez = { titolo: t, voci: [] }; out.sezioni.push(sez); }
+      else if (mode === 'p') { if (!sez && !out.intro) out.intro = t; }
+      else if (mode === 'li' && sez) {
+        var m = /<strong[^>]*>([\s\S]*?)<\/strong>/i.exec(buf), l = '', rest = buf;
+        if (m) { l = pulisci_(m[1]).replace(/[.:\s]+$/, ''); rest = buf.replace(m[0], ''); }
+        sez.voci.push({ l: l, t: pulisci_(rest).replace(/^[\s.:]+/, ''), d: depth });
+      }
+    }
+    buf = '';
+  }
+  for (var i = 0; i < toks.length; i++) {
+    var tk = toks[i], tm = /^<(\/?)(h2|h3|p|ul|li)\b/i.exec(tk);
+    if (!tm) { if (mode) buf += tk; continue; }
+    var close = tm[1] === '/', tag = tm[2].toLowerCase();
+    if (tag === 'ul') { handle(); mode = null; depth += close ? -1 : 1; continue; }
+    if (close) { handle(); mode = null; } else { handle(); mode = tag; }
+  }
+  handle();
+  return out;
 }
 
 function cartella_() {

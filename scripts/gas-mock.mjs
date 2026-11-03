@@ -74,10 +74,10 @@ export function createBackend({ codeFiles, persistFile, driveDir } = {}) {
     },
     UrlFetchApp: {
       fetch(url) {
-        try { const out = execFileSync('curl', ['-s', '-m', '15', '-w', '\n%{http_code}', url], { maxBuffer: 20e6 }); const i = out.lastIndexOf(10);
+        try { const out = execFileSync('curl', ['-sL', '--compressed', '-m', '20', '-A', 'Mozilla/5.0', '-w', '\n%{http_code}', url], { maxBuffer: 20e6 }); const i = out.lastIndexOf(10);
           const body = out.subarray(0, i), code = parseInt(out.subarray(i + 1).toString(), 10);
-          return { getResponseCode: () => code, getBlob: () => Utilities.newBlob(body, 'image/jpeg', 'img') }; }
-        catch { return { getResponseCode: () => 502, getBlob: () => null }; }
+          return { getResponseCode: () => code, getContentText: () => body.toString('utf8'), getBlob: () => Utilities.newBlob(body, 'image/jpeg', 'img') }; }
+        catch { return { getResponseCode: () => 502, getContentText: () => '', getBlob: () => null }; }
       },
     },
   });
