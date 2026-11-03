@@ -405,6 +405,7 @@ function pulisci_(h) {
   return String(h || '').replace(/<[^>]*>/g, ' ')
     .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
     .replace(/&euro;/g, '€').replace(/&times;/g, '×').replace(/&ndash;/g, '–').replace(/&#(\d+);/g, function (_, n) { return String.fromCharCode(+n); })
+    .replace(/[\u{1F000}-\u{1FFFF}\u{2190}-\u{27BF}\uFE0F\u200D]/gu, '') // emoji e simboli: il PDF non li sa disegnare
     .replace(/\s+/g, ' ').replace(/\s+([.,;:])/g, '$1').trim();
 }
 function scheda_(sku) {
@@ -430,30 +431,40 @@ function scheda_(sku) {
   return res;
 }
 function parseScheda_(blk) {
-  var out = { titolo: '', intro: '', sezioni: [] }, sez = null, depth = 0, mode = null, buf = '';
-  var toks = blk.split(/(<\/?(?:h2|h3|p|ul|li)\b[^>]*>)/i);
+  var out = { titolo: '', sottotitolo: '', intro: '', sezioni: [] }, sez = null, depth = 0, mode = null, buf = '', paras = [];
+  var toks = blk.split(/(<\/?(?:h2|h3|h4|p|ul|li)\b[^>]*>)/i);
+  function chiudiIntro() { if (paras.length) { var t = '', k; for (k = 0; k < paras.length && (t + paras[k]).length < 1000; k++) t += (t ? ' ' : '') + paras[k]; out.intro = t || paras[0]; paras = []; } }
   function handle() {
     var t = pulisci_(buf);
     if (mode && t) {
       if (mode === 'h2') out.titolo = t;
-      else if (mode === 'h3') { sez = { titolo: t, voci: [] }; out.sezioni.push(sez); }
-      else if (mode === 'p') { if (!sez && !out.intro) out.intro = t; }
+      else if (mode === 'h3') {
+        if (!sez && !out.titolo && !paras.length) out.titolo = t; // titolo principale della pagina
+        else { chiudiIntro(); sez = { titolo: t, voci: [] }; out.sezioni.push(sez); }
+      }
+      else if (mode === 'h4') { if (sez) sez.voci.push({ l: '', t: t, d: 1, h: 1 }); else if (!out.sottotitolo) out.sottotitolo = t; }
+      else if (mode === 'p') {
+        if (/declina ogni responsabilit|^prima di ordinare/i.test(t)) { /* avvisi legali del sito: non vanno in brochure */ }
+        else if (!sez) paras.push(t); else sez.voci.push({ l: '', t: t, d: 1 });
+      }
       else if (mode === 'li' && sez) {
-        var m = /<strong[^>]*>([\s\S]*?)<\/strong>/i.exec(buf), l = '', rest = buf;
-        if (m) { l = pulisci_(m[1]).replace(/[.:\s]+$/, ''); rest = buf.replace(m[0], ''); }
+        // etichetta solo se il grassetto è a inizio voce e seguito da punto/due punti ("Dimensioni. 350 × ...")
+        var m = /^\s*<strong[^>]*>([\s\S]*?)<\/strong>\s*([.:])/i.exec(buf), l = '', rest = buf;
+        if (m) { l = pulisci_(m[1]).replace(/[.:\s]+$/, ''); rest = buf.substr(m[0].length); }
         sez.voci.push({ l: l, t: pulisci_(rest).replace(/^[\s.:]+/, ''), d: depth });
       }
     }
     buf = '';
   }
   for (var i = 0; i < toks.length; i++) {
-    var tk = toks[i], tm = /^<(\/?)(h2|h3|p|ul|li)\b/i.exec(tk);
+    var tk = toks[i], tm = /^<(\/?)(h2|h3|h4|p|ul|li)\b/i.exec(tk);
     if (!tm) { if (mode) buf += tk; continue; }
     var close = tm[1] === '/', tag = tm[2].toLowerCase();
     if (tag === 'ul') { handle(); mode = null; depth += close ? -1 : 1; continue; }
     if (close) { handle(); mode = null; } else { handle(); mode = tag; }
   }
-  handle();
+  handle(); chiudiIntro();
+  out.sezioni = out.sezioni.filter(function (s) { return s.voci.length; });
   return out;
 }
 

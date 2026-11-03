@@ -738,7 +738,7 @@ function schedaToText(s) {
   if (s.intro) L.push('> ' + s.intro);
   (s.sezioni || []).forEach(sec => {
     L.push('# ' + sec.titolo);
-    sec.voci.forEach(v => L.push((v.d > 1 ? '- ' : '') + (v.l ? v.l + (v.t ? ': ' + v.t : ':') : v.t)));
+    sec.voci.forEach(v => L.push(v.h ? '## ' + v.t : (v.d > 1 ? '- ' : '') + (v.l ? v.l + (v.t ? ': ' + v.t : ':') : v.t)));
   });
   return L.join('\n');
 }
@@ -762,6 +762,7 @@ function brParse(txt) {
     if (l.startsWith('> ')) { out.intro = (out.intro ? out.intro + ' ' : '') + l.slice(2); return; }
     if (l.startsWith('# ')) { sec = { titolo: l.slice(2), voci: [] }; out.sezioni.push(sec); return; }
     if (!sec) { sec = { titolo: 'Caratteristiche', voci: [] }; out.sezioni.push(sec); }
+    if (l.startsWith('## ')) { sec.voci.push({ l: '', t: l.slice(3), h: true }); return; }
     const sub = l.startsWith('- '); if (sub) l = l.slice(2);
     const m = /^([^:]{2,60}):\s*(.*)$/.exec(l);
     sec.voci.push({ l: m ? m[1] : '', t: m ? m[2] : l, sub });
@@ -769,7 +770,7 @@ function brParse(txt) {
   return out;
 }
 function brFacts(m) { // riquadro "In breve": solo ciò che c'è nel testo
-  const all = m.sezioni.flatMap(s => s.voci), f = [];
+  const all = m.sezioni.flatMap(s => s.voci).filter(v => !v.h), f = [];
   const dim = all.find(v => /^dimensioni/i.test(v.l));
   if (dim) {
     const cut = dim.t.search(/\bPeso\b/i), d = (cut >= 0 ? dim.t.slice(0, cut) : dim.t).replace(/[.\s]+$/, '');
@@ -789,7 +790,7 @@ function brPreview() {
     <h3 style="margin:10px 0 4px;color:#0b3560">${esc($('br-t').value)}</h3><div class="skub">${esc($('br-sku').value)}</div>
     ${m.intro ? `<p style="font-size:12.5px;margin:8px 0">${esc(m.intro)}</p>` : ''}
     ${facts.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0">${facts.map(f => `<div style="background:#edf5fa;padding:6px 9px;border-radius:4px;font-size:11.5px"><div style="font-size:9px;color:#6b7280;font-weight:700">${f.k}</div><b style="color:#0b3560">${esc(f.v)}</b>${f.s ? ` <span style="color:#6b7280;font-size:10px">${f.s}</span>` : ''}</div>`).join('')}</div>` : ''}
-    ${m.sezioni.map(s => `<div style="font-weight:700;color:#0b3560;margin:10px 0 3px;border-left:3px solid #1fa9d6;padding-left:6px">${esc(s.titolo)}</div><ul style="margin:0 0 0 18px;font-size:12px">${s.voci.map(v => `<li style="${v.sub ? 'margin-left:14px;' : ''}">${v.l ? `<b>${esc(v.l)}</b>${v.t ? ': ' : ''}` : ''}${esc(v.t)}</li>`).join('')}</ul>`).join('')}
+    ${m.sezioni.map(s => `<div style="font-weight:700;color:#0b3560;margin:10px 0 3px;border-left:3px solid #1fa9d6;padding-left:6px">${esc(s.titolo)}</div><ul style="margin:0 0 0 18px;font-size:12px">${s.voci.map(v => v.h ? `<li style="list-style:none;margin-left:-14px;font-weight:700;color:#0b3560;margin-top:6px">${esc(v.t)}</li>` : `<li style="${v.sub ? 'margin-left:14px;' : ''}">${v.l ? `<b>${esc(v.l)}</b>${v.t ? ': ' : ''}` : ''}${esc(v.t)}</li>`).join('')}</ul>`).join('')}
     ${$('br-p').value ? `<div class="arc-tot">${eur(+$('br-p').value)} <span style="font-size:11px;color:#aaa;font-weight:400">IVA esclusa</span></div>` : ''}`;
 }
 async function imgData(url) { // la foto passa dal backend (il bucket S3 non ha CORS) e viene ridimensionata
@@ -865,7 +866,7 @@ async function buildBrochure() {
   mod.sezioni.forEach(s => {
     const soft = /avvertenz/i.test(s.titolo);
     section(/^descrizione del prodotto$/i.test(s.titolo) ? 'Caratteristiche tecniche' : s.titolo);
-    s.voci.forEach(v => bul(v.l, v.t, v.sub, soft));
+    s.voci.forEach(v => { if (v.h) { need(10); y += 1.5; ink(NAVY); font('bold', 10); doc.text(v.t, M + 1.2, y); y += 5.5; } else bul(v.l, v.t, v.sub, soft); });
     y += 4;
   });
   if (price > 0) {
