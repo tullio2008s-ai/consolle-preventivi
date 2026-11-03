@@ -750,48 +750,53 @@ async function imgData(url) { // la foto passa dal backend (il bucket S3 non ha 
   return { data: cv.toDataURL('image/jpeg', 0.85), w: cv.width, h: cv.height, fmt: 'JPEG' };
 }
 async function buildBrochure() {
-  const { jsPDF } = window.jspdf, doc = new jsPDF({ unit: 'mm', format: 'a4' }), W = 210, M = 16;
+  const { jsPDF } = window.jspdf, doc = new jsPDF({ unit: 'mm', format: 'a4' }), W = 210, M = 15, R = W - M;
+  const NAVY = [11, 53, 96], CYAN = [31, 169, 214], ORANGE = [245, 166, 35], GREY = [107, 114, 128], INK = [31, 41, 55], PALE = [237, 245, 250], FR = [209, 213, 219];
+  const fill = c => doc.setFillColor(c[0], c[1], c[2]), ink = c => doc.setTextColor(c[0], c[1], c[2]), stroke = c => doc.setDrawColor(c[0], c[1], c[2]);
+  const font = (st, sz) => { doc.setFont('helvetica', st); doc.setFontSize(sz); };
   const title = $('br-t').value, sku = $('br-sku').value, price = parseFloat($('br-p').value);
   const lines = $('br-d').value.split('\n').map(l => l.trim()).filter(Boolean);
-  // header
-  doc.setFillColor(255, 255, 255); doc.rect(0, 0, W, 34, 'F'); doc.setFillColor(204, 0, 0); doc.rect(0, 31, W, 3, 'F');
-  try { if (LOGO) doc.addImage(LOGO, 'PNG', M, 9, 62, 10.5); } catch (e) {}
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(204, 0, 0); doc.text('SCHEDA PRODOTTO', W - M, 14, { align: 'right' });
-  doc.setFont('helvetica', 'normal'); doc.setTextColor(120, 120, 120); doc.setFontSize(8); doc.text('www.gettoniere-shop.it', W - M, 20, { align: 'right' });
-  // titolo
-  let y = 48; doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor(20, 20, 20);
-  const tl = doc.splitTextToSize(title, W - M * 2); doc.text(tl, M, y); y += tl.length * 8;
-  doc.setFont('courier', 'bold'); doc.setFontSize(9); doc.setTextColor(204, 0, 0); doc.text('COD. ' + sku, M, y); y += 8;
+  // intestazione
+  try { if (LOGO) doc.addImage(LOGO, 'PNG', M, 12, 62, 10.5); } catch (e) {}
+  ink(NAVY); font('bold', 19); doc.text('SCHEDA PRODOTTO', R, 18, { align: 'right' });
+  ink(GREY); font('normal', 9); doc.text('www.gettoniere-shop.it', R, 25, { align: 'right' });
+  stroke(NAVY); doc.setLineWidth(0.8); doc.line(M, 36, R, 36); doc.setLineWidth(0.2);
+  // titolo prodotto
+  font('bold', 16); const tl = doc.splitTextToSize(title, W - M * 2 - 14);
+  const bh = 9 + tl.length * 7 + 7; let y = 45;
+  fill(PALE); doc.rect(M, y, W - M * 2, bh, 'F'); fill(NAVY); doc.rect(M, y, 1.8, bh, 'F');
+  ink(NAVY); font('bold', 16); doc.text(tl, M + 7, y + 10);
+  ink(GREY); font('normal', 9); doc.text('Cod. ' + sku, M + 7, y + 10 + tl.length * 7 - 1); y += bh + 8;
   // foto
   if (brProd.foto_url) {
     try {
       const im = await imgData(brProd.foto_url), maxW = W - M * 2, maxH = 95, k = Math.min(maxW / im.w, maxH / im.h);
       const w = im.w * k, h = im.h * k;
       doc.addImage(im.data, im.fmt, M + (maxW - w) / 2, y + 3 + (maxH - h) / 2, w, h);
-      doc.setDrawColor(235, 235, 235); doc.roundedRect(M, y, maxW, maxH + 6, 2, 2, 'S'); y += maxH + 14;
+      stroke(FR); doc.roundedRect(M, y, maxW, maxH + 6, 2, 2, 'S'); y += maxH + 14;
     } catch (e) { showMsg('Foto non scaricabile: brochure senza immagine', 'warn'); }
   }
   // caratteristiche
   if (lines.length) {
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(204, 0, 0); doc.text('CARATTERISTICHE', M, y); y += 2;
-    doc.setDrawColor(204, 0, 0); doc.line(M, y, M + 38, y); y += 7;
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(40, 40, 40);
-    lines.forEach(l => { doc.splitTextToSize(l, W - M * 2 - 6).forEach((s, i) => { if (y > 262) { doc.addPage(); y = 20; } if (!i) { doc.setFillColor(204, 0, 0); doc.circle(M + 1, y - 1.2, 0.8, 'F'); } doc.text(s, M + 5, y); y += 5.5; }); y += 1; });
+    fill(CYAN); doc.rect(M, y, 1.6, 6.5, 'F'); ink(NAVY); font('bold', 12); doc.text('Caratteristiche', M + 4.5, y + 5); y += 13;
+    ink(INK); font('normal', 10);
+    lines.forEach(l => { doc.splitTextToSize(l, W - M * 2 - 7).forEach((s, i) => { if (y > 262) { doc.addPage(); y = 20; } if (!i) { fill(ORANGE); doc.circle(M + 1.2, y - 1.2, 0.9, 'F'); } doc.text(s, M + 6, y); y += 5.4; }); y += 1.2; });
   }
   if (price > 0) {
-    y += 4; if (y > 250) { doc.addPage(); y = 20; }
-    doc.setFillColor(25, 25, 25); doc.roundedRect(M, y, W - M * 2, 16, 2, 2, 'F'); doc.setFillColor(204, 0, 0); doc.rect(M, y, 3, 16, 'F');
-    doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text('Prezzo (IVA esclusa)', M + 8, y + 10);
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.text('E ' + fmt(price), W - M - 6, y + 11, { align: 'right' });
+    y += 5; if (y > 250) { doc.addPage(); y = 20; }
+    fill(NAVY); doc.rect(M, y, W - M * 2, 14, 'F'); fill(ORANGE); doc.rect(M, y, 3.5, 14, 'F');
+    ink([255, 255, 255]); font('bold', 10); doc.text('PREZZO (IVA ESCLUSA)', M + 9, y + 9);
+    font('bold', 15); const s = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(price) + ' + IVA';
+    doc.text(s, R - 6, y + 9.6, { align: 'right' }); doc.text('€', R - 6 - doc.getTextWidth(s) - 1.2, y + 9.6, { align: 'right' });
   }
-  // footer
+  // piè di pagina
   const n = doc.getNumberOfPages();
   for (let p = 1; p <= n; p++) {
-    doc.setPage(p); doc.setFillColor(25, 25, 25); doc.rect(0, 278, W, 19, 'F'); doc.setFillColor(204, 0, 0); doc.rect(0, 278, W, 2, 'F');
-    doc.setTextColor(215, 215, 215); doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5);
-    doc.text(FOOT1, W / 2, 287, { align: 'center' });
-    doc.setFont('helvetica', 'normal'); doc.setTextColor(180, 180, 180); doc.setFontSize(7);
-    doc.text(FOOT2, W / 2, 292.5, { align: 'center' });
+    doc.setPage(p);
+    stroke(CYAN); doc.setLineWidth(0.5); doc.line(M, 281, R, 281); doc.setLineWidth(0.2);
+    ink(NAVY); font('bold', 8); doc.text(FOOT1, W / 2, 286, { align: 'center' });
+    ink(GREY); font('normal', 8); doc.text(FOOT2, W / 2, 290.5, { align: 'center' });
+    if (n > 1) { font('normal', 7); doc.text(`pag. ${p}/${n}`, R, 295, { align: 'right' }); }
   }
   return { doc, fname: `Brochure_${sku}_${title.replace(/[^\w]+/g, '_').slice(0, 40)}.pdf` };
 }
