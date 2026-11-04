@@ -715,7 +715,7 @@ function importProd(inp) {
 }
 
 // ─────────── BROCHURE ───────────
-let brProd = null, brLoad = null, brPrezzoManuale = false;
+let brProd = null, brLoad = null, brPrezzoManuale = false, brTitoloManuale = false;
 function brSearch(v) {
   const d = $('br-drop');
   if (v.trim().length < 2) { d.classList.remove('on'); return; }
@@ -726,7 +726,7 @@ function brSearch(v) {
   d.classList.add('on');
 }
 function brPick(p) {
-  brProd = p; $('br-drop').classList.remove('on'); $('br-q').value = '';
+  brProd = { ...p }; brTitoloManuale = false; $('br-drop').classList.remove('on'); $('br-q').value = '';
   $('br-form').style.display = 'block';
   $('br-t').value = p.nome; $('br-sku').value = p.sku; $('br-p').value = ''; brPrezzoManuale = false;
   $('br-d').value = [p.descrizione && p.descrizione !== p.nome ? p.descrizione : '', p.categoria ? 'Categoria: ' + p.categoria : ''].filter(Boolean).join('\n');
@@ -752,6 +752,8 @@ async function brCarica() {
     if (!brProd || brProd.sku !== sku) return;
     if (!s.trovato) { st.innerHTML = '<b style="color:#b45309">⚠ Questo prodotto non è sul sito (o con un altro codice): il PDF avrà solo il testo del catalogo. Scrivi a mano le caratteristiche qui sopra.</b>' + (cat > 0 ? '<br><b style="color:#b45309">⚠ Prezzo: ho messo quello del catalogo, controlla che sia IVA esclusa.</b>' : ''); if (!brPrezzoManuale && cat > 0) { $('br-p').value = cat; brPreview(); } return; }
     $('br-d').value = schedaToText(s);
+    if (s.nome_sito && !brTitoloManuale) $('br-t').value = s.nome_sito; // titolo e foto come sul sito, non come nel catalogo importato
+    if (s.foto_sito) brProd.foto_url = s.foto_sito;
     let np = '';
     if (!brPrezzoManuale) {
       if (s.prezzo_sito > 0) $('br-p').value = s.prezzo_sito; // prezzo pubblicato sul sito: sempre IVA esclusa
@@ -897,7 +899,8 @@ async function buildBrochure() {
 async function brPDF() {
   if (!brProd) return;
   if (brLoad) { // se la scheda dal sito è ancora in lettura, aspetto: altrimenti il PDF uscirebbe con il testo provvisorio
-    $('br-st').innerHTML = '⏳ Attendo la scheda tecnica dal sito…'; try { await brLoad; } catch (e) { /* già segnalato */ }
+    if (await Promise.race([brLoad.then(() => false, () => false), Promise.resolve(true)])) $('br-st').innerHTML = '⏳ Attendo la scheda tecnica dal sito…';
+    try { await brLoad; } catch (e) { /* già segnalato */ }
   }
   const { doc, fname } = await buildBrochure(); doc.save(fname);
 }

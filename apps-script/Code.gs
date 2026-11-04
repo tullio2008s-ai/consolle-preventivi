@@ -38,7 +38,7 @@ var STATI = ['bozza', 'inviato', 'accettato', 'perso'];
 var HEAD = ['data', 'cliente_id', 'cli_azienda', 'cli_referente', 'cli_indirizzo', 'cli_citta', 'cli_piva_cf', 'cli_email',
   'cli_telefono', 'pagamento', 'validita', 'consegna', 'resa', 'garanzia', 'note', 'trasp_descr', 'trasp_costo',
   'imponibile', 'iva', 'totale'];
-var FOTO_HOST = 'ss-pics.s3.eu-west-1.amazonaws.com';
+var FOTO_HOST = 'ss-pics.s3.eu-west-1.amazonaws.com', FOTO_HOST2 = 'files.scontrino.com'; // il sito ha cambiato dominio delle foto
 
 // ═══════════════ ENTRY POINT ═══════════════
 function doGet() {
@@ -385,7 +385,7 @@ function kpi_() {
 // ═══════════════ IMMAGINI, DRIVE, EMAIL ═══════════════
 function img_(u) { // il bucket S3 non invia header CORS: la foto passa da qui, come data URL
   var url = String(u || '');
-  if (url.indexOf('https://' + FOTO_HOST + '/') !== 0) fail_(400, 'Host non consentito');
+  if (url.indexOf('https://' + FOTO_HOST + '/') !== 0 && url.indexOf('https://' + FOTO_HOST2 + '/') !== 0) fail_(400, 'Host non consentito');
   var r = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
   if (r.getResponseCode() !== 200) fail_(502, 'Foto non disponibile');
   var blob = r.getBlob(), bytes = blob.getBytes();
@@ -411,20 +411,25 @@ function pulisci_(h) {
 function scheda_(sku) {
   sku = String(sku || '').trim();
   if (!/^[A-Za-z0-9_.\-]{2,40}$/.test(sku)) fail_(400, 'Codice non valido');
-  var cache = CacheService.getScriptCache(), ck = 'scheda4_' + sku, hit = cache.get(ck);
+  var cache = CacheService.getScriptCache(), ck = 'scheda5_' + sku, hit = cache.get(ck);
   if (hit) return JSON.parse(hit);
-  var res = { trovato: false };
+  var res = { trovato: false }, nome = '', foto = '';
   var s = sitoGet_('/search?q=' + encodeURIComponent(sku)), parts = s.split('{"name_1":'), path = '', prezzo = 0;
   for (var i = 1; i < parts.length && !path; i++) {
     if (parts[i].indexOf('u003cem\\u003e' + sku + '\\u003c/em') < 0 && parts[i].indexOf('"code":"' + sku + '"') < 0) continue;
     var mm = /"permalink_path_1":"([^"]+)"/.exec(parts[i]), pm = /"price":"([0-9.]+)"/.exec(parts[i]);
-    if (mm) { path = mm[1]; prezzo = pm ? parseFloat(pm[1]) : 0; }
+    if (mm) {
+      path = mm[1]; prezzo = pm ? parseFloat(pm[1]) : 0;
+      var nm = /^"((?:[^"\\]|\\.)*)"/.exec(parts[i]), fm = /"featured_image_url_list":"([^"]+)"/.exec(parts[i]);
+      try { nome = nm ? pulisci_(JSON.parse('"' + nm[1] + '"')) : ''; } catch (e) { nome = ''; }
+      foto = fm ? fm[1].replace('/list-', '/original-') : '';
+    }
   }
   if (path && /^\/it\/[a-z0-9\-\/]+$/i.test(path)) {
     var html = sitoGet_(path), k = html.indexOf('class="product-details"');
     if (k >= 0) {
       var blk = html.substr(k, 40000), j = blk.indexOf('</div>'); if (j > 0) blk = blk.substr(0, j);
-      res = parseScheda_(blk); res.url = SITO + path; res.prezzo_sito = prezzo; res.trovato = res.sezioni.length > 0 || !!res.intro;
+      res = parseScheda_(blk); res.url = SITO + path; res.prezzo_sito = prezzo; res.nome_sito = nome; res.foto_sito = /^https:\/\/(files\.scontrino\.com|ss-pics\.s3\.eu-west-1\.amazonaws\.com)\//.test(foto) ? foto : ''; res.trovato = res.sezioni.length > 0 || !!res.intro;
     }
   }
   if (res.trovato) cache.put(ck, JSON.stringify(res), 21600);
