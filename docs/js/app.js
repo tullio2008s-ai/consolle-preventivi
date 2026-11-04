@@ -754,6 +754,7 @@ async function brCarica() {
     $('br-d').value = schedaToText(s);
     if (s.nome_sito && !brTitoloManuale) $('br-t').value = s.nome_sito; // titolo e foto come sul sito, non come nel catalogo importato
     if (s.foto_sito) brProd.foto_url = s.foto_sito;
+    if (s.url) brProd.url = s.url;
     let np = '';
     if (!brPrezzoManuale) {
       if (s.prezzo_sito > 0) $('br-p').value = s.prezzo_sito; // prezzo pubblicato sul sito: sempre IVA esclusa
@@ -811,7 +812,16 @@ async function imgData(url) { // la foto passa dal backend (il bucket S3 non ha 
   const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); cx.drawImage(im, 0, 0, cv.width, cv.height);
   return { data: cv.toDataURL('image/jpeg', 0.85), w: cv.width, h: cv.height, fmt: 'JPEG' };
 }
+// Prova livelli di compattezza crescenti (foto più bassa, testo e spaziature leggermente ridotti) e usa il primo che sta in una pagina sola;
+// se il testo è davvero lungo resta il layout normale su più pagine.
 async function buildBrochure() {
+  const livelli = [68, 62, 56, 50, 44, 38, 32].map(ph => ({ ph, k: 1 })).concat([{ ph: 38, k: 0.95 }, { ph: 32, k: 0.92 }, { ph: 28, k: 0.9 }, { ph: 0, k: 0.88 }]);
+  const prima = await buildBrochureOnce(livelli[0]);
+  if (prima.doc.getNumberOfPages() === 1) return prima;
+  for (const lv of livelli.slice(1)) { const r = await buildBrochureOnce(lv); if (r.doc.getNumberOfPages() === 1) return r; }
+  return prima;
+}
+async function buildBrochureOnce(lv) {
   const { jsPDF } = window.jspdf, doc = new jsPDF({ unit: 'mm', format: 'a4' }), W = 210, M = 15, R = W - M, BOT = 272;
   const NAVY = [11, 53, 96], CYAN = [31, 169, 214], ORANGE = [245, 166, 35], GREY = [107, 114, 128], INK = [31, 41, 55], PALE = [237, 245, 250], FR = [209, 213, 219];
   const fill = c => doc.setFillColor(c[0], c[1], c[2]), ink = c => doc.setTextColor(c[0], c[1], c[2]), stroke = c => doc.setDrawColor(c[0], c[1], c[2]);
@@ -835,9 +845,9 @@ async function buildBrochure() {
   // introduzione
   if (mod.intro) { ink(INK); font('normal', 9.5); doc.splitTextToSize(mod.intro, W - M * 2).forEach(l => { doc.text(l, M, y); y += 4.8; }); y += 4; }
   // foto
-  if (brProd.foto_url) {
+  if (brProd.foto_url && lv.ph > 0) {
     try {
-      const im = await imgData(brProd.foto_url), maxW = W - M * 2, maxH = mod.intro ? 68 : 80, k = Math.min(maxW / im.w, maxH / im.h);
+      const im = (brProd._img && brProd._img.u === brProd.foto_url) ? brProd._img.v : (brProd._img = { u: brProd.foto_url, v: await imgData(brProd.foto_url) }).v, maxW = W - M * 2, maxH = lv.ph, k = Math.min(maxW / im.w, maxH / im.h);
       const w = im.w * k, h = im.h * k;
       need(maxH + 12);
       doc.addImage(im.data, im.fmt, M + (maxW - w) / 2, y + 3 + (maxH - h) / 2, w, h);
@@ -860,7 +870,7 @@ async function buildBrochure() {
   }
   // sezioni della scheda tecnica
   const bul = (lb, tx, sub, soft) => {
-    const x = M + (sub ? 8 : 1.2), sz = soft ? 8.5 : 9.5, lh = soft ? 4.2 : 4.9, tw = R - (x + 4) - 3;
+    const x = M + (sub ? 8 : 1.2), sz = (soft ? 8.5 : 9.5) * lv.k, lh = (soft ? 4.2 : 4.9) * lv.k, tw = R - (x + 4) - 3;
     font('normal', sz); const full = lb ? (tx ? lb + ': ' + tx : lb) : tx, ls = doc.splitTextToSize(full, tw);
     need(ls.length * lh + 2);
     fill(sub ? CYAN : ORANGE); doc.circle(x, y - 1.2, sub ? 0.6 : 0.85, 'F');
@@ -870,21 +880,28 @@ async function buildBrochure() {
       doc.text(ls[0].slice(lb.length + (tx ? 1 : 0)).trim(), x + 4 + lw, y);
     } else { ink(soft ? GREY : INK); font('normal', sz); doc.text(ls[0], x + 4, y); }
     ink(soft ? GREY : INK); font('normal', sz); ls.slice(1).forEach((l, i) => doc.text(l, x + 4, y + (i + 1) * lh));
-    y += ls.length * lh + (soft ? 1.3 : 1.7);
+    y += ls.length * lh + (soft ? 1.3 : 1.7) * lv.k;
   };
   mod.sezioni.forEach(s => {
     const soft = /avvertenz/i.test(s.titolo);
     section(/^descrizione del prodotto$/i.test(s.titolo) ? 'Caratteristiche tecniche' : s.titolo);
     s.voci.forEach(v => { if (v.h) { need(10); y += 1.5; ink(NAVY); font('bold', 10); doc.text(v.t, M + 1.2, y); y += 5.5; } else bul(v.l, v.t, v.sub, soft); });
-    y += 4;
+    y += 4 * lv.k;
   });
+  const url = brProd.url || (SITE + '/search?q=' + encodeURIComponent(sku));
+  y += 2; need((price > 0 ? 18 : 0) + 14);
   if (price > 0) {
-    y += 2; need(20);
     fill(NAVY); doc.rect(M, y, W - M * 2, 14, 'F'); fill(ORANGE); doc.rect(M, y, 3.5, 14, 'F');
     ink([255, 255, 255]); font('bold', 10); doc.text('PREZZO (IVA ESCLUSA)', M + 9, y + 9);
     font('bold', 15); const s = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(price) + ' + IVA';
     doc.text(s, R - 6, y + 9.6, { align: 'right' }); doc.text('€', R - 6 - doc.getTextWidth(s) - 1.2, y + 9.6, { align: 'right' });
+    y += 18;
   }
+  // pulsante verso la scheda online (cliccabile nel PDF)
+  fill(ORANGE); doc.roundedRect(M, y, W - M * 2, 11, 2, 2, 'F');
+  ink(NAVY); font('bold', 11); doc.text('VAI AL PRODOTTO SUL SITO  >', W / 2, y + 7.2, { align: 'center' });
+  doc.link(M, y, W - M * 2, 11, { url });
+  ink(GREY); font('normal', 7); doc.text(url.replace('https://www.', ''), W / 2, y + 15, { align: 'center' });
   // piè di pagina
   const n = doc.getNumberOfPages();
   for (let p = 1; p <= n; p++) {
