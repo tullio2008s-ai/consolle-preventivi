@@ -715,7 +715,7 @@ function importProd(inp) {
 }
 
 // ─────────── BROCHURE ───────────
-let brProd = null;
+let brProd = null, brLoad = null;
 function brSearch(v) {
   const d = $('br-drop');
   if (v.trim().length < 2) { d.classList.remove('on'); return; }
@@ -730,7 +730,7 @@ function brPick(p) {
   $('br-form').style.display = 'block';
   $('br-t').value = p.nome; $('br-sku').value = p.sku; $('br-p').value = p.prezzo > 0 ? p.prezzo : '';
   $('br-d').value = [p.descrizione && p.descrizione !== p.nome ? p.descrizione : '', p.categoria ? 'Categoria: ' + p.categoria : ''].filter(Boolean).join('\n');
-  brPreview(); brCarica();
+  brPreview(); brLoad = brCarica();
 }
 // Scheda tecnica letta dalla pagina prodotto di gettoniere-shop.it (via backend): dimensioni, peso, caratteristiche
 function schedaToText(s) {
@@ -742,6 +742,7 @@ function schedaToText(s) {
   });
   return L.join('\n');
 }
+function brCaricaClick() { brLoad = brCarica(); return brLoad; }
 async function brCarica() {
   if (!brProd) return;
   const sku = brProd.sku, st = $('br-st'), cat = brProd.prezzo;
@@ -749,11 +750,11 @@ async function brCarica() {
   try {
     const s = await api('scheda?sku=' + encodeURIComponent(sku));
     if (!brProd || brProd.sku !== sku) return;
-    if (!s.trovato) { st.innerHTML = 'Scheda non trovata sul sito: scrivi a mano le caratteristiche.'; return; }
+    if (!s.trovato) { st.innerHTML = '<b style="color:#b45309">⚠ Questo prodotto non è sul sito (o con un altro codice): il PDF avrà solo il testo del catalogo. Scrivi a mano le caratteristiche qui sopra.</b>'; return; }
     $('br-d').value = schedaToText(s); brPreview();
     st.innerHTML = `✓ Dati letti da <a href="${esc(s.url)}" target="_blank" rel="noopener">gettoniere-shop.it</a>: puoi modificarli prima di creare il PDF.`
       + (s.prezzo_sito && cat > 0 && Math.abs(s.prezzo_sito - cat) > 0.01 ? `<br><b>⚠ Prezzo sul sito ${eur(s.prezzo_sito)}, nel catalogo ${eur(cat)}</b>: nella brochure vale il campo Prezzo qui sopra.` : '');
-  } catch (e) { st.innerHTML = 'Lettura dal sito non riuscita (' + esc(e.message || e) + '): scrivi a mano le caratteristiche.'; }
+  } catch (e) { st.innerHTML = '<b style="color:#b45309">⚠ Lettura dal sito non riuscita (' + esc(e.message || e) + ')</b>: premi «Rileggi dal sito» o scrivi a mano le caratteristiche.'; }
 }
 // testo → struttura: "> intro", "# sezione", "Etichetta: testo", "- sotto-punto"
 function brParse(txt) {
@@ -889,6 +890,9 @@ async function buildBrochure() {
 }
 async function brPDF() {
   if (!brProd) return;
+  if (brLoad) { // se la scheda dal sito è ancora in lettura, aspetto: altrimenti il PDF uscirebbe con il testo provvisorio
+    $('br-st').innerHTML = '⏳ Attendo la scheda tecnica dal sito…'; try { await brLoad; } catch (e) { /* già segnalato */ }
+  }
   const { doc, fname } = await buildBrochure(); doc.save(fname);
 }
 document.addEventListener('click', e => { if (!e.target.closest('#v-brochure .srel')) $('br-drop')?.classList.remove('on'); });

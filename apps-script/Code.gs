@@ -463,7 +463,22 @@ function parseScheda_(blk) {
     if (tag === 'ul') { handle(); mode = null; depth += close ? -1 : 1; continue; }
     if (close) { handle(); mode = null; } else { handle(); mode = tag; }
   }
-  handle(); chiudiIntro();
+  handle();
+  if (!out.sezioni.length && paras.length > 1) { // pagina fatta di soli paragrafi: "Etichetta: testo" diventa elenco caratteristiche
+    var re = /^([^:\d][^:]{1,39}?)\s*:\s*(\S[\s\S]*)$/, first = -1, k;
+    for (k = 0; k < paras.length && first < 0; k++) if (re.test(paras[k]) && paras[k].length < 500) first = k;
+    for (k = 1; k < paras.length && first < 0; k++) if (paras[k].length < 140 || /^\d+[.)]\s/.test(paras[k])) first = k; // niente etichette: da qui in poi elenco puntato
+    if (first >= 0) {
+      var voci = [];
+      for (k = first; k < paras.length; k++) {
+        var mm = re.exec(paras[k]);
+        voci.push(mm && paras[k].length < 500 ? { l: mm[1], t: mm[2], d: 1 } : { l: '', t: paras[k], d: 1 });
+      }
+      paras = paras.slice(0, first);
+      out.sezioni.push({ titolo: 'Caratteristiche', voci: voci });
+    }
+  }
+  chiudiIntro();
   out.sezioni = out.sezioni.filter(function (s) { return s.voci.length; });
   return out;
 }
