@@ -689,8 +689,21 @@ function renderProd() {
     <td>${p.foto_url ? `<img src="${esc(p.foto_url)}" style="width:36px;height:36px;object-fit:cover;border-radius:4px;border:1px solid #eee" loading="lazy" onerror="this.style.display='none'">` : '<span style="color:#ddd">—</span>'}</td>
     <td><span class="skub">${esc(p.sku)}</span></td><td style="max-width:260px"><strong>${esc(p.nome)}</strong></td>
     <td style="white-space:nowrap">${p.prezzo > 0 ? eur(p.prezzo) : '—'}</td><td style="font-size:11px;color:#999">${esc(p.categoria || '—')}</td>
+    <td><button class="bsm" style="white-space:nowrap" onclick="schedaProdotto('${esc(p.sku)}', this)">📄 Scheda prodotto</button></td>
     <td><button class="bsm bdel" onclick="delProd('${esc(p.sku)}')">✕</button></td></tr>`).join('');
   $('prod-more').textContent = rows.length > LIM ? `Mostrati i primi ${LIM}: usa ricerca o categoria.` : '';
+}
+// Dalla lista prodotti: legge titolo, foto, prezzo e scheda dal sito e scarica subito il PDF
+async function schedaProdotto(sku, btn) {
+  const p = PRODS.find(x => x.sku === sku); if (!p) return;
+  const lbl = btn.innerHTML; btn.disabled = true; btn.innerHTML = '⏳ Leggo dal sito…';
+  try {
+    brPick(p); await brLoad;
+    const sito = !!brProd.url;
+    const { doc, fname } = await buildBrochure(); doc.save(fname);
+    showMsg(sito ? 'Scheda scaricata (dati letti dal sito, prezzo IVA esclusa del sito)' : 'Prodotto non presente sul sito: scheda creata con i dati del catalogo, controlla prezzo e testo', sito ? 'ok' : 'warn');
+  } catch (e) { fail(e); }
+  finally { btn.disabled = false; btn.innerHTML = lbl; }
 }
 async function delProd(sku) {
   if (!confirm('Rimuovere il prodotto dal catalogo? (I preventivi già fatti restano intatti)')) return;

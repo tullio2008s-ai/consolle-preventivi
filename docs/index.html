@@ -200,11 +200,11 @@
     <div style="font-weight:700;font-size:17px">Catalogo Prodotti <span id="prod-cnt" style="font-size:13px;color:#bbb;font-weight:400"></span></div>
     <label class="ilbl">📥 Importa Excel (aggiorna per SKU)<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="importProd(this)"></label>
   </div>
-  <div class="fbar"><input id="pq" placeholder="Cerca nome, SKU, categoria…" oninput="renderProd()">
+  <div class="fbar"><input id="pq" placeholder="Cerca per codice, nome o categoria…" oninput="renderProd()">
     <select id="pcat" onchange="renderProd()"></select></div>
   <div class="card" style="padding:0;overflow:hidden">
     <div style="overflow-x:auto"><table class="tbl">
-      <thead><tr><th>Foto</th><th>SKU</th><th>Nome</th><th>Prezzo</th><th>Categoria</th><th></th></tr></thead>
+      <thead><tr><th>Foto</th><th>SKU</th><th>Nome</th><th>Prezzo</th><th>Categoria</th><th>Scheda</th><th></th></tr></thead>
       <tbody id="prod-body"></tbody></table></div>
     <div id="prod-more" style="padding:10px;text-align:center;font-size:12px;color:#999"></div>
   </div>
@@ -258,6 +258,6 @@
 </div>
 
 <script src="config.js"></script>
-<script src="js/app.js?v=20261104d"></script>
+<script src="js/app.js?v=20261104e"></script>
 </body>
 </html>
