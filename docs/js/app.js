@@ -715,7 +715,7 @@ function importProd(inp) {
 }
 
 // ─────────── BROCHURE ───────────
-let brProd = null, brLoad = null;
+let brProd = null, brLoad = null, brPrezzoManuale = false;
 function brSearch(v) {
   const d = $('br-drop');
   if (v.trim().length < 2) { d.classList.remove('on'); return; }
@@ -728,7 +728,7 @@ function brSearch(v) {
 function brPick(p) {
   brProd = p; $('br-drop').classList.remove('on'); $('br-q').value = '';
   $('br-form').style.display = 'block';
-  $('br-t').value = p.nome; $('br-sku').value = p.sku; $('br-p').value = p.prezzo > 0 ? p.prezzo : '';
+  $('br-t').value = p.nome; $('br-sku').value = p.sku; $('br-p').value = ''; brPrezzoManuale = false;
   $('br-d').value = [p.descrizione && p.descrizione !== p.nome ? p.descrizione : '', p.categoria ? 'Categoria: ' + p.categoria : ''].filter(Boolean).join('\n');
   brPreview(); brLoad = brCarica();
 }
@@ -750,10 +750,16 @@ async function brCarica() {
   try {
     const s = await api('scheda?sku=' + encodeURIComponent(sku));
     if (!brProd || brProd.sku !== sku) return;
-    if (!s.trovato) { st.innerHTML = '<b style="color:#b45309">⚠ Questo prodotto non è sul sito (o con un altro codice): il PDF avrà solo il testo del catalogo. Scrivi a mano le caratteristiche qui sopra.</b>'; return; }
-    $('br-d').value = schedaToText(s); brPreview();
+    if (!s.trovato) { st.innerHTML = '<b style="color:#b45309">⚠ Questo prodotto non è sul sito (o con un altro codice): il PDF avrà solo il testo del catalogo. Scrivi a mano le caratteristiche qui sopra.</b>' + (cat > 0 ? '<br><b style="color:#b45309">⚠ Prezzo: ho messo quello del catalogo, controlla che sia IVA esclusa.</b>' : ''); if (!brPrezzoManuale && cat > 0) { $('br-p').value = cat; brPreview(); } return; }
+    $('br-d').value = schedaToText(s);
+    let np = '';
+    if (!brPrezzoManuale) {
+      if (s.prezzo_sito > 0) $('br-p').value = s.prezzo_sito; // prezzo pubblicato sul sito: sempre IVA esclusa
+      else if (cat > 0) { $('br-p').value = cat; np = '<br><b style="color:#b45309">⚠ Prezzo non letto dal sito: ho messo quello del catalogo, controlla che sia IVA esclusa.</b>'; }
+    }
+    brPreview();
     st.innerHTML = `✓ Dati letti da <a href="${esc(s.url)}" target="_blank" rel="noopener">gettoniere-shop.it</a>: puoi modificarli prima di creare il PDF.`
-      + (s.prezzo_sito && cat > 0 && Math.abs(s.prezzo_sito - cat) > 0.01 ? `<br><b>⚠ Prezzo sul sito ${eur(s.prezzo_sito)}, nel catalogo ${eur(cat)}</b>: nella brochure vale il campo Prezzo qui sopra.` : '');
+      + (s.prezzo_sito > 0 ? `<br>Prezzo (IVA esclusa) preso dal sito: ${eur(s.prezzo_sito)}${brPrezzoManuale ? ' — non applicato perché l\'hai modificato tu' : ''}. Puoi cambiarlo qui sopra prima di creare il PDF.` : '') + np;
   } catch (e) { st.innerHTML = '<b style="color:#b45309">⚠ Lettura dal sito non riuscita (' + esc(e.message || e) + ')</b>: premi «Rileggi dal sito» o scrivi a mano le caratteristiche.'; }
 }
 // testo → struttura: "> intro", "# sezione", "Etichetta: testo", "- sotto-punto"
