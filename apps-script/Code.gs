@@ -411,7 +411,7 @@ function pulisci_(h) {
 function scheda_(sku) {
   sku = String(sku || '').trim();
   if (!/^[A-Za-z0-9_.\-]{2,40}$/.test(sku)) fail_(400, 'Codice non valido');
-  var cache = CacheService.getScriptCache(), ck = 'scheda_' + sku, hit = cache.get(ck);
+  var cache = CacheService.getScriptCache(), ck = 'scheda4_' + sku, hit = cache.get(ck);
   if (hit) return JSON.parse(hit);
   var res = { trovato: false };
   var s = sitoGet_('/search?q=' + encodeURIComponent(sku)), parts = s.split('{"name_1":'), path = '', prezzo = 0;
