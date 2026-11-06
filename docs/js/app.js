@@ -3,7 +3,7 @@
 
 const SITE = 'https://www.gettoniere-shop.it';
 const FOOT1 = 'www.gettoniere-shop.it - PAYSOLUTION S.R.L.S. - P.Iva 04206000921';
-const FOOT2 = 'Via L. Pasteur 19 - Selargius (CA) - Tel. 3400069549 - commerciale@gettoniere-shop.it';
+const FOOT2 = 'Via Pasteur 19 - 09047 Selargius (CA) - Italia - 3400069549 - commerciale@gettoniere-shop.it';
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const fmt = n => isNaN(n) ? '0,00' : Number(n).toFixed(2).replace('.', ',');

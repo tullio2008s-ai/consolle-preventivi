@@ -112,13 +112,13 @@ def build(path, story, header, footer, top=40 * mm, bottom=22 * mm):
 
 # ───────────────────────── ISTRUZIONI ─────────────────────────
 FOOT1 = 'www.gettoniere-shop.it - PAYSOLUTION S.R.L.S. - P.Iva 04206000921'
-FOOT2 = 'Via Giuseppe Mercalli 37, - 09129 Cagliari (CA) - Italia - 3400069549 - commerciale@gettoniere-shop.it'
+FOOT2 = 'Via Pasteur 19 - 09047 Selargius (CA) - Italia - 3400069549 - commerciale@gettoniere-shop.it'
 
 def istr_header(c, d):
     c.drawImage(LOGO, M, H - 22.5 * mm, width=62 * mm, height=10.5 * mm, mask='auto', preserveAspectRatio=True)
     c.setFillColor(NAVY); c.setFont('Helvetica-Bold', 19); c.drawRightString(W - M, H - 18 * mm, 'ISTRUZIONI')
     c.setFillColor(INK); c.setFont('Helvetica', 10); c.drawRightString(W - M, H - 25 * mm, 'Installazione e uso')
-    c.setFillColor(GREY); c.setFont('Helvetica', 8.5); c.drawRightString(W - M, H - 30.5 * mm, 'Rev. 1 - 06/11/2026 - Italiano')
+    c.setFillColor(GREY); c.setFont('Helvetica', 8.5); c.drawRightString(W - M, H - 30.5 * mm, 'Rev. 3 - 06/11/2026 - Italiano')
     c.setStrokeColor(NAVY); c.setLineWidth(.8); c.line(M, H - 36 * mm, W - M, H - 36 * mm)
     c.setFillColor(ORANGE); c.roundRect(W / 2 - 22 * mm, H - 12 * mm, 44 * mm, 5 * mm, 1 * mm, stroke=0, fill=1)
     c.setFillColor(NAVY); c.setFont('Helvetica-Bold', 6.5); c.drawCentredString(W / 2, H - 10.4 * mm, 'MODELLO PER APPROVAZIONE')
@@ -127,7 +127,7 @@ def istr_footer(c, d, n):
     c.setStrokeColor(CYAN); c.setLineWidth(.5); c.line(M, 16 * mm, W - M, 16 * mm)
     c.setFillColor(NAVY); c.setFont('Helvetica-Bold', 8); c.drawCentredString(W / 2, 11.5 * mm, FOOT1)
     c.setFillColor(GREY); c.setFont('Helvetica', 8); c.drawCentredString(W / 2, 7 * mm, FOOT2)
-    c.setFont('Helvetica', 7); c.drawRightString(W - M, 3 * mm, 'BGM2DOC4000 - Istruzioni rev. 1 - pag. %d/%d' % (d.page, n))
+    c.setFont('Helvetica', 7); c.drawRightString(W - M, 3 * mm, 'BGM2DOC4000 - Istruzioni rev. 3 - pag. %d/%d' % (d.page, n))
 
 
 def istruzioni():
@@ -191,7 +191,7 @@ def istruzioni():
     sm.setStyle(TableStyle([('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('LEFTPADDING', (0, 0), (-1, -1), 0)]))
     s += [KeepTogether([Section('Smaltimento e dichiarazione di conformità'), sm, Spacer(1, 1 * mm),
                         Paragraph('La dichiarazione di conformità CE di questo prodotto è un documento separato, scaricabile dalla scheda prodotto.', ST['grey'])])]
-    build(os.path.join(OUT, '1_MODELLO_Istruzioni_BGM2DOC4000_rev1.pdf'), s, istr_header, istr_footer)
+    build(os.path.join(OUT, '1_MODELLO_Istruzioni_BGM2DOC4000_rev3.pdf'), s, istr_header, istr_footer)
 
 
 # ───────────────────────── DICHIARAZIONE CE ─────────────────────────
