@@ -500,7 +500,7 @@ function scheda_(sku) {
       path = mm[1]; prezzo = pm ? parseFloat(pm[1]) : 0;
       var nm = /^"((?:[^"\\]|\\.)*)"/.exec(parts[i]), fm = /"featured_image_url_list":"([^"]+)"/.exec(parts[i]);
       try { nome = nm ? pulisci_(JSON.parse('"' + nm[1] + '"')) : ''; } catch (e) { nome = ''; }
-      foto = fm ? fm[1].replace('/list-', '/original-') : '';
+      foto = fm ? fm[1].replace('/list-', '/large-') : '';
     }
   }
   if (path && /^\/it\/[a-z0-9\-\/]+$/i.test(path)) {

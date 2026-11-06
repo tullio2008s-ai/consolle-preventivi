@@ -886,7 +886,10 @@ async function buildBrochure() {
   const prima = await buildBrochureOnce(livelli[0]);
   if (prima.doc.getNumberOfPages() === 1) return prima;
   for (const lv of livelli.slice(1)) { const r = await buildBrochureOnce(lv); if (r.doc.getNumberOfPages() === 1) return r; }
-  return prima;
+  // regola: mai più di 2 pagine (con la foto sempre presente se disponibile); testo un po' più piccolo finché serve
+  if (prima.doc.getNumberOfPages() <= 2) return prima;
+  for (const k of [0.95, 0.92, 0.9, 0.88, 0.85]) { const r = await buildBrochureOnce({ ph: 56, k }); if (r.doc.getNumberOfPages() <= 2) return r; }
+  return await buildBrochureOnce({ ph: 40, k: 0.82 });
 }
 async function buildBrochureOnce(lv) {
   const { jsPDF } = window.jspdf, doc = new jsPDF({ unit: 'mm', format: 'a4' }), W = 210, M = 15, R = W - M, BOT = 272;
