@@ -152,7 +152,29 @@ function docCella(sku, tipo) {
   const tip = `${nome}: ${stato}` + (st === 'rosso' ? '' : (n ? '\nClic per scaricare' : '\nFile non ancora caricato') + `\nLingue: ${Object.keys(d.lingue).join(', ') || '—'}`);
   const val = st === 'giallo' ? `<button class="bsm vbtn" title="Segna come validato (verde)" onclick="validaDoc('${esc(sku)}','${tipo}')">✔</button>`
     : st === 'verde' ? `<button class="bsm vbtn" title="Riporta a da validare (giallo)" onclick="validaDoc('${esc(sku)}','${tipo}')">↺</button>` : '';
-  return `<td class="docb"><span class="spia spia-${st}" title="${esc(tip)}" onclick="apriDoc('${esc(sku)}','${tipo}',this)" style="cursor:pointer"></span>${val}</td>`;
+  const up = `<button class="bsm vbtn" title="${st === 'rosso' ? 'Carica ' + (tipo === 'ce' ? 'scheda CE' : 'istruzioni') + ' (PDF o Word) per questo codice' : 'Carica un altro file / un\'altra lingua'}" onclick="caricaDocFile('${esc(sku)}','${tipo}')">⬆</button>`;
+  return `<td class="docb"><span class="spia spia-${st}" title="${esc(tip)}" onclick="apriDoc('${esc(sku)}','${tipo}',this)" style="cursor:pointer"></span>${val}${up}</td>`;
+}
+// carica un file (PDF/Word) e lo collega al codice: nome unico CODICE_Nome prodotto_LINGUA, spia gialla (da validare)
+function caricaDocFile(sku, tipo) {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.pdf,.docx';
+  inp.onchange = async () => {
+    const f = inp.files[0]; if (!f) return;
+    const ext = (f.name.split('.').pop() || '').toLowerCase(); if (!['pdf', 'docx'].includes(ext)) return showMsg('Sono ammessi solo PDF e Word (.docx)', 'warn');
+    const lang = (prompt('Lingua del documento (IT, EN, FR, ES, DE, PT…)', 'IT') || '').trim().toUpperCase(); if (!lang) return;
+    const p = PRODS.find(x => x.sku === sku), pre = tipo === 'ce' ? 'CE_' : '';
+    const nome = (pre + sku + '_' + ((p && p.nome) || '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) + '_' + lang).replace(/_+/g, '_') + '.' + ext;
+    showMsg('Carico ' + nome + '…');
+    try {
+      const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(f); });
+      const up = await api('documento-carica', { method: 'POST', body: { nome, base64: b64 } });
+      const d = DOCS[sku + '|' + tipo], lingue = { ...(d ? d.lingue : {}) };
+      lingue[lang] = { origine: 'caricato dalla consolle', data: new Date().toISOString().slice(0, 10), ext, file_id: up.id, nome: up.nome || nome };
+      await api('documenti', { method: 'POST', body: { sku, tipo, stato: 'giallo', lingue, origine: (d && d.origine) || 'caricato dalla consolle' } });
+      await caricaDocumenti(); renderProd(); showMsg('Documento caricato e collegato a ' + sku + ' (da validare)');
+    } catch (e) { fail(e); }
+  };
+  inp.click();
 }
 async function validaDoc(sku, tipo) {
   const st = docStato(sku, tipo); if (st === 'rosso') return showMsg('Manca il documento: non si può validare', 'warn');
