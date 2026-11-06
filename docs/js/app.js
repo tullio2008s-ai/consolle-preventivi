@@ -152,16 +152,36 @@ function docCella(sku, tipo) {
   const tip = `${nome}: ${stato}` + (st === 'rosso' ? '' : (n ? '\nClic per scaricare' : '\nFile non ancora caricato') + `\nLingue: ${Object.keys(d.lingue).join(', ') || '—'}`);
   const val = st === 'giallo' ? `<button class="bsm vbtn" title="Segna come validato (verde)" onclick="validaDoc('${esc(sku)}','${tipo}')">✔</button>`
     : st === 'verde' ? `<button class="bsm vbtn" title="Riporta a da validare (giallo)" onclick="validaDoc('${esc(sku)}','${tipo}')">↺</button>` : '';
-  const up = `<button class="bsm vbtn" title="${st === 'rosso' ? 'Carica ' + (tipo === 'ce' ? 'scheda CE' : 'istruzioni') + ' (PDF o Word) per questo codice' : 'Carica un altro file / un\'altra lingua'}" onclick="caricaDocFile('${esc(sku)}','${tipo}')">⬆</button>`;
+  const up = `<button class="bsm vbtn" title="${st === 'rosso' ? 'Carica ' + (tipo === 'ce' ? 'scheda CE' : 'istruzioni') + ' (PDF o Word) per questo codice' : 'Sostituisci, aggiungi una lingua o rimuovi'}" onclick="menuCarica('${esc(sku)}','${tipo}',this)">⬆</button>`;
   return `<td class="docb"><span class="spia spia-${st}" title="${esc(tip)}" onclick="apriDoc('${esc(sku)}','${tipo}',this)" style="cursor:pointer"></span>${val}${up}</td>`;
 }
 // carica un file (PDF/Word) e lo collega al codice: nome unico CODICE_Nome prodotto_LINGUA, spia gialla (da validare)
-function caricaDocFile(sku, tipo) {
+function menuCarica(sku, tipo, el) {
+  document.querySelectorAll('.docmenu').forEach(m => m.remove());
+  const l = docFiles(sku, tipo); if (!l.length) return caricaDocFile(sku, tipo);
+  const m = document.createElement('div'); m.className = 'docmenu';
+  const voce = (t, f) => { const a = document.createElement('a'); a.href = '#'; a.textContent = t; a.onclick = ev => { ev.preventDefault(); m.remove(); f(); }; m.appendChild(a); };
+  l.forEach(([k, x]) => voce('🔄 Sostituisci ' + k + (x.nome ? ' (' + x.nome + ')' : ''), () => caricaDocFile(sku, tipo, k)));
+  voce('➕ Aggiungi un\'altra lingua', () => caricaDocFile(sku, tipo));
+  l.forEach(([k]) => voce('🗑 Rimuovi ' + k, () => rimuoviDocLingua(sku, tipo, k)));
+  const r = el.getBoundingClientRect(); m.style.left = (r.left + scrollX) + 'px'; m.style.top = (r.bottom + scrollY + 4) + 'px';
+  document.body.appendChild(m); setTimeout(() => document.addEventListener('click', () => m.remove(), { once: true }), 0);
+}
+async function rimuoviDocLingua(sku, tipo, lang) {
+  if (!confirm(`Rimuovere il file ${lang} da ${sku}? (il prodotto resterà senza questo documento)`)) return;
+  const d = DOCS[sku + '|' + tipo], lingue = { ...d.lingue }; delete lingue[lang];
+  try {
+    if (Object.keys(lingue).length) await api('documenti', { method: 'POST', body: { sku, tipo, stato: 'giallo', lingue } });
+    else await api('documenti?sku=' + encodeURIComponent(sku) + '&tipo=' + tipo, { method: 'DELETE' });
+    await caricaDocumenti(); renderProd(); showMsg('File rimosso da ' + sku);
+  } catch (e) { fail(e); }
+}
+function caricaDocFile(sku, tipo, langFissa) {
   const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.pdf,.docx';
   inp.onchange = async () => {
     const f = inp.files[0]; if (!f) return;
     const ext = (f.name.split('.').pop() || '').toLowerCase(); if (!['pdf', 'docx'].includes(ext)) return showMsg('Sono ammessi solo PDF e Word (.docx)', 'warn');
-    const lang = (prompt('Lingua del documento (IT, EN, FR, ES, DE, PT…)', 'IT') || '').trim().toUpperCase(); if (!lang) return;
+    const lang = langFissa || (prompt('Lingua del documento (IT, EN, FR, ES, DE, PT…)', 'IT') || '').trim().toUpperCase(); if (!lang) return;
     const p = PRODS.find(x => x.sku === sku), pre = tipo === 'ce' ? 'CE_' : '';
     const nome = (pre + sku + '_' + ((p && p.nome) || '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) + '_' + lang).replace(/_+/g, '_') + '.' + ext;
     showMsg('Carico ' + nome + '…');
@@ -171,7 +191,7 @@ function caricaDocFile(sku, tipo) {
       const d = DOCS[sku + '|' + tipo], lingue = { ...(d ? d.lingue : {}) };
       lingue[lang] = { origine: 'caricato dalla consolle', data: new Date().toISOString().slice(0, 10), ext, file_id: up.id, nome: up.nome || nome };
       await api('documenti', { method: 'POST', body: { sku, tipo, stato: 'giallo', lingue, origine: (d && d.origine) || 'caricato dalla consolle' } });
-      await caricaDocumenti(); renderProd(); showMsg('Documento caricato e collegato a ' + sku + ' (da validare)');
+      await caricaDocumenti(); renderProd(); showMsg((langFissa ? 'Documento sostituito su ' : 'Documento caricato e collegato a ') + sku + ' (da validare)');
     } catch (e) { fail(e); }
   };
   inp.click();
