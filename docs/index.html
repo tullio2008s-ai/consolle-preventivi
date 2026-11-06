@@ -198,6 +198,7 @@
 <div id="v-prodotti" style="display:none">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px;flex-wrap:wrap;gap:7px">
     <div style="font-weight:700;font-size:17px">Catalogo Prodotti <span id="prod-cnt" style="font-size:13px;color:#bbb;font-weight:400"></span></div>
+    <button class="abtn" title="Legge dal sito nome, prezzo, categoria e foto dei codici indicati (nuovi o da aggiornare)" onclick="aggiornaDalSito()">🔄 Aggiorna prodotti dal sito</button>
     <label class="ilbl">📥 Importa Excel (aggiorna per SKU)<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="importProd(this)"></label>
   </div>
   <div class="fbar"><input id="pq" placeholder="Cerca per codice, nome o categoria…" oninput="renderProd()">
@@ -260,6 +261,6 @@
 </div>
 
 <script src="config.js"></script>
-<script src="js/app.js?v=20261106f"></script>
+<script src="js/app.js?v=20261106g"></script>
 </body>
 </html>

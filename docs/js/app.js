@@ -823,6 +823,19 @@ function importProd(inp) {
   });
 }
 
+// legge dal sito i codici indicati: aggiunge i nuovi e aggiorna nome/prezzo/categoria/foto dei presenti
+async function aggiornaDalSito() {
+  const t = prompt('Codici dei prodotti da leggere dal sito (separati da spazio o virgola).\nI nuovi vengono aggiunti, quelli presenti vengono aggiornati con i dati del sito.', '');
+  const codici = (t || '').toUpperCase().split(/[\s,;]+/).filter(Boolean); if (!codici.length) return;
+  showMsg('Leggo ' + codici.length + ' codice/i dal sito…');
+  try {
+    const r = await api('sito-aggiorna', { method: 'POST', body: { codici } });
+    PRODS = await api('prodotti'); PRODS.forEach(p => p._n = norm(p.sku + ' ' + p.nome + ' ' + p.descrizione + ' ' + p.categoria));
+    renderProd(); salvaCache();
+    showMsg(`Aggiunti: ${r.aggiunti.join(', ') || '—'} · Aggiornati: ${r.aggiornati.join(', ') || '—'}` + (r.nonTrovati.length ? ` · Non trovati sul sito: ${r.nonTrovati.join(', ')}` : ''), r.nonTrovati.length ? 'warn' : undefined);
+  } catch (e) { fail(e); }
+}
+
 // ─────────── BROCHURE ───────────
 let brProd = null, brLoad = null, brPrezzoManuale = false, brTitoloManuale = false;
 function brSearch(v) {

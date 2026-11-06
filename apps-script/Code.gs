@@ -82,6 +82,7 @@ function route_(req) {
     case 'kpi': return kpi_();
     case 'img': return img_(q.u);
     case 'scheda': return scheda_(q.sku);
+    case 'sito-aggiorna': return sitoAggiorna_(body);
     case 'invia-email': return inviaEmail_(body || {}, user);
     case 'archivia-pdf': return archiviaPdf_(body || {}, user);
   }
@@ -512,6 +513,31 @@ function scheda_(sku) {
   }
   if (res.trovato) cache.put(ck, JSON.stringify(res), 21600);
   return res;
+}
+// Aggiorna/aggiunge prodotti leggendo il catalogo del sito per codice (ricerca del sito: nome, prezzo, categoria, foto, indirizzo).
+function sitoAggiorna_(body) {
+  var codici = (body && body.codici || []).map(function (c) { return String(c).trim().toUpperCase(); }).filter(function (c) { return /^[A-Z0-9_.\-]{2,40}$/.test(c); });
+  if (!codici.length || codici.length > 30) fail_(400, 'Indica da 1 a 30 codici');
+  return withLock_(function () {
+    var all = readAll_('Prodotti'), bySku = {}; all.forEach(function (p) { bySku[p.sku] = p; });
+    var nuovi = [], res = { aggiunti: [], aggiornati: [], nonTrovati: [] };
+    codici.forEach(function (sku) {
+      var parts = sitoGet_('/search?q=' + encodeURIComponent(sku)).split('{"name_1":'), hit = null;
+      for (var i = 1; i < parts.length && !hit; i++) {
+        var cm = /"code":\{"value":"((?:[^"\\]|\\.)*)"/.exec(parts[i]);
+        if (cm && cm[1].replace(/\\u003c\/?em\\u003e/g, '').toUpperCase() === sku) hit = parts[i];
+      }
+      if (!hit) { res.nonTrovati.push(sku); return; }
+      var nm = /^"((?:[^"\\]|\\.)*)"/.exec(hit), pm = /"price":"([0-9.]+)"/.exec(hit), fm = /"featured_image_url_list":"([^"]+)"/.exec(hit),
+        lm = /"permalink_path_1":"([^"]+)"/.exec(hit), cat = /"categories_1":\{"lvl0":"((?:[^"\\]|\\.)*)"/.exec(hit), nome = '', categoria = '';
+      try { nome = nm ? pulisci_(JSON.parse('"' + nm[1] + '"')) : ''; categoria = cat ? pulisci_(JSON.parse('"' + cat[1] + '"')) : ''; } catch (e) { /* resta vuoto */ }
+      var ex = bySku[sku], r = proClean_({ sku: sku, nome: nome || (ex && ex.nome) || sku, descrizione: ex ? ex.descrizione : '', prezzo: pm ? parseFloat(pm[1]) : (ex ? ex.prezzo : 0),
+        categoria: categoria || (ex ? ex.categoria : ''), foto_url: fm ? fm[1] : (ex ? ex.foto_url : ''), url_sito: lm ? SITO + lm[1] : (ex ? ex.url_sito : '') });
+      if (ex) { updateRow_('Prodotti', ex._row, r); res.aggiornati.push(sku); } else { nuovi.push(r); res.aggiunti.push(sku); }
+    });
+    appendRows_('Prodotti', nuovi);
+    return res;
+  });
 }
 function parseScheda_(blk) {
   var out = { titolo: '', sottotitolo: '', intro: '', sezioni: [] }, sez = null, depth = 0, mode = null, buf = '', paras = [];
