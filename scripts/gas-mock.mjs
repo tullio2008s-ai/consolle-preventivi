@@ -68,6 +68,7 @@ export function createBackend({ codeFiles, persistFile, driveDir } = {}) {
       sendEmail(to, subject, body, opt) { outbox.push({ to, subject, body, name: opt.name, replyTo: opt.replyTo, allegati: (opt.attachments || []).map(a => ({ nome: a.getName(), byte: a.getBytes().length })) }); },
     },
     DriveApp: {
+      getFileById: id => { const r = st.fileIds && st.fileIds[id]; if (!r || !st.files[r.fid] || !st.files[r.fid][r.n]) throw new Error('no file'); return fileObj(r.fid, r.n); },
       getFolderById: id => { if (!folders[id]) throw new Error('no folder'); return folderObj(id); },
       getFoldersByName: n => { const id = Object.keys(folders).find(k => folders[k] === n); const it = id ? [folderObj(id)] : []; return { hasNext: () => it.length > 0, next: () => it.shift() }; },
       createFolder: n => { const id = 'fld-' + crypto.randomUUID(); folders[id] = n; return folderObj(id); },
@@ -87,13 +88,19 @@ export function createBackend({ codeFiles, persistFile, driveDir } = {}) {
       getId: () => id,
       getFilesByName(n) { const f = files[n] ? [fileObj(id, n)] : []; return { hasNext: () => f.length > 0, next: () => f.shift() }; },
       createFile(blob) {
-        const n = blob.getName(); files[n] = { trashed: false, size: blob.getBytes().length };
+        const n = blob.getName(); files[n] = { trashed: false, size: blob.getBytes().length }; mem[id + '/' + n] = toBuf(blob.getBytes());
         if (driveDir) { mkdirSync(driveDir, { recursive: true }); writeFileSync(join(driveDir, n), toBuf(blob.getBytes())); }
         return fileObj(id, n);
       },
     };
   }
-  const fileObj = (fid, n) => ({ setTrashed(t) { delete st.files[fid][n]; return this; }, getUrl: () => `https://drive.google.com/file/d/prova-${encodeURIComponent(n)}/view` });
+  const mem = {};
+  const fileObj = (fid, n) => ({
+    getId() { const id = 'f-' + Buffer.from(fid + '/' + n).toString('hex').slice(0, 40); (st.fileIds ||= {})[id] = { fid, n }; return id; },
+    getName: () => n,
+    getParents() { const a = [folderObj(fid)]; return { hasNext: () => a.length > 0, next: () => a.shift() }; },
+    getBlob: () => ({ getBytes: () => mem[fid + '/' + n] || readFileSync(join(driveDir, n)), getContentType: () => /\.pdf$/i.test(n) ? 'application/pdf' : 'application/octet-stream' }),
+    setTrashed(t) { delete st.files[fid][n]; return this; }, getUrl: () => `https://drive.google.com/file/d/prova-${encodeURIComponent(n)}/view` });
 
   for (const f of codeFiles) if (existsSync(f)) vm.runInContext(readFileSync(f, 'utf8'), ctx, { filename: f });
 

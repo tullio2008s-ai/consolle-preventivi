@@ -145,11 +145,14 @@ async function caricaDocumenti() {
 }
 const docStato = (sku, tipo) => { const d = DOCS[sku + '|' + tipo]; return d && (d.origine || Object.keys(d.lingue).length) ? d.stato : 'rosso'; };
 const docTot = sku => { const a = docStato(sku, 'istruzioni'), b = docStato(sku, 'ce'); return a === 'rosso' || b === 'rosso' ? 'rosso' : a === 'giallo' || b === 'giallo' ? 'giallo' : 'verde'; };
+const docFiles = (sku, tipo) => { const d = DOCS[sku + '|' + tipo]; return d ? Object.entries(d.lingue).filter(([, x]) => x.file_id || x.url) : []; };
 function docCella(sku, tipo) {
-  const st = docStato(sku, tipo), d = DOCS[sku + '|' + tipo], nome = tipo === 'ce' ? 'Scheda CE' : 'Istruzioni';
-  const tip = st === 'rosso' ? `${nome}: documento mancante` : st === 'giallo' ? `${nome}: da validare (clic per segnare come OK)\nOrigine: ${d.origine}\nLingue: ${Object.keys(d.lingue).join(', ') || '—'}` : `${nome}: OK (clic per riportare a "da validare")`;
-  const urls = d ? Object.entries(d.lingue).filter(([, x]) => x.url) : [];
-  return `<td class="docb"><span class="spia spia-${st}" title="${esc(tip)}" onclick="validaDoc('${esc(sku)}','${tipo}')"></span>${urls.length ? `<button class="bsm" onclick="apriDoc('${esc(sku)}','${tipo}',this)">${nome}</button>` : ''}</td>`;
+  const st = docStato(sku, tipo), d = DOCS[sku + '|' + tipo], nome = tipo === 'ce' ? 'Scheda CE' : 'Istruzioni', n = docFiles(sku, tipo).length;
+  const stato = st === 'rosso' ? 'documento mancante' : st === 'giallo' ? 'da validare' : 'OK (validato)';
+  const tip = `${nome}: ${stato}` + (st === 'rosso' ? '' : (n ? '\nClic per scaricare' : '\nFile non ancora caricato') + `\nLingue: ${Object.keys(d.lingue).join(', ') || '—'}`);
+  const val = st === 'giallo' ? `<button class="bsm vbtn" title="Segna come validato (verde)" onclick="validaDoc('${esc(sku)}','${tipo}')">✔</button>`
+    : st === 'verde' ? `<button class="bsm vbtn" title="Riporta a da validare (giallo)" onclick="validaDoc('${esc(sku)}','${tipo}')">↺</button>` : '';
+  return `<td class="docb"><span class="spia spia-${st}" title="${esc(tip)}" onclick="apriDoc('${esc(sku)}','${tipo}',this)" style="cursor:pointer"></span>${val}</td>`;
 }
 async function validaDoc(sku, tipo) {
   const st = docStato(sku, tipo); if (st === 'rosso') return showMsg('Manca il documento: non si può validare', 'warn');
@@ -158,13 +161,26 @@ async function validaDoc(sku, tipo) {
   try { await api('documenti', { method: 'POST', body: { sku, tipo, stato: nuovo } }); DOCS[sku + '|' + tipo].stato = nuovo; renderProd(); showMsg(nuovo === 'verde' ? 'Documento validato' : 'Riportato a da validare'); }
   catch (e) { fail(e); }
 }
-function apriDoc(sku, tipo, btn) {
+// scarica un documento: file su Drive (passa dal backend, serve il login) oppure indirizzo diretto
+async function scaricaDoc(x) {
+  if (x.url && !x.file_id) return void window.open(x.url, '_blank', 'noopener');
+  showMsg('Scarico il documento…');
+  try {
+    const r = await api('documento?id=' + encodeURIComponent(x.file_id));
+    const bin = atob(r.base64), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([u8], { type: r.mime })); a.download = r.nome; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  } catch (e) { fail(e); }
+}
+function apriDoc(sku, tipo, el) {
   document.querySelectorAll('.docmenu').forEach(m => m.remove());
-  const l = Object.entries(DOCS[sku + '|' + tipo].lingue).filter(([, x]) => x.url);
-  if (l.length === 1) return void window.open(l[0][1].url, '_blank', 'noopener');
+  const st = docStato(sku, tipo), l = docFiles(sku, tipo);
+  if (st === 'rosso') return showMsg('Manca il documento: non è ancora stato preparato', 'warn');
+  if (!l.length) return showMsg('Il documento è stato abbinato ma il file non è ancora caricato', 'warn');
+  if (l.length === 1) return void scaricaDoc(l[0][1]);
   const m = document.createElement('div'); m.className = 'docmenu';
-  m.innerHTML = l.map(([k, x]) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(k)}${x.nome ? ' — ' + esc(x.nome) : ''}</a>`).join('');
-  const r = btn.getBoundingClientRect(); m.style.left = (r.left + scrollX) + 'px'; m.style.top = (r.bottom + scrollY + 2) + 'px';
+  l.forEach(([k, x]) => { const a = document.createElement('a'); a.href = '#'; a.textContent = k + (x.nome ? ' — ' + x.nome : ''); a.onclick = ev => { ev.preventDefault(); scaricaDoc(x); }; m.appendChild(a); });
+  const r = el.getBoundingClientRect(); m.style.left = (r.left + scrollX) + 'px'; m.style.top = (r.bottom + scrollY + 4) + 'px';
   document.body.appendChild(m); setTimeout(() => document.addEventListener('click', () => m.remove(), { once: true }), 0);
 }
 

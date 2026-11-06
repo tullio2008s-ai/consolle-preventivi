@@ -41,6 +41,14 @@ t('documenti: crea e aggiorna per (sku,tipo)', () => {
 });
 t('documenti: verde/giallo senza documento rifiutati', () => { assert.equal(call('documenti', { method: 'POST', body: { sku: 'P9', tipo: 'ce', stato: 'verde' } }, tok).status, 400); });
 t('documenti: tipo e stato validi', () => { assert.equal(call('documenti', { method: 'POST', body: { sku: 'P1', tipo: 'x' } }, tok).status, 400); assert.equal(call('documenti', { method: 'POST', body: { sku: 'P1', tipo: 'ce', stato: 'blu' } }, tok).status, 400); });
+t('documento: carica e scarica (solo cartella documenti)', () => {
+  const b64 = Buffer.from('%PDF-prova').toString('base64');
+  const up = call('documento-carica', { method: 'POST', body: { nome: 'P1_Gettoniera_IT.pdf', base64: b64 } }, tok).data;
+  assert.ok(up.id); const dl = call('documento', { query: { id: up.id } }, tok).data;
+  assert.equal(dl.nome, 'P1_Gettoniera_IT.pdf'); assert.equal(Buffer.from(dl.base64, 'base64').toString(), '%PDF-prova');
+  assert.equal(call('documento-carica', { method: 'POST', body: { nome: 'x.exe', base64: b64 } }, tok).status, 400);
+  assert.equal(call('documento', { query: { id: 'zz-non-esiste' } }, tok).status, 404);
+});
 t('documenti: elimina riga (torna rosso)', () => { call('documenti', { method: 'DELETE', query: { sku: 'P1', tipo: 'ce' } }, tok); assert.equal(call('documenti', {}, tok).data.length, 1); });
 // prodotti
 t('importa prodotti', () => assert.equal(call('prodotti', { method: 'POST', body: [{ sku: 'P1', nome: 'Gettoniera', prezzo: '341,6' }, { sku: 'P2', nome: 'Timer', prezzo: 10 }] }, tok).data.salvati, 2));

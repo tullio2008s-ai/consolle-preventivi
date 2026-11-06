@@ -9,6 +9,7 @@
 var VERSION = 1;
 var CFG = {
   cartellaDrive: 'Preventivi Gettoniere-Shop',
+  cartellaDocumenti: 'Documenti prodotti Gettoniere-Shop',
   nomeFoglio: 'Consolle Preventivi - DATI',
   mittente: 'Gettoniere-Shop',
   replyTo: 'commerciale@gettoniere-shop.it',
@@ -75,6 +76,8 @@ function route_(req) {
     case 'clienti': return rClienti_(m, q, body);
     case 'prodotti': return rProdotti_(m, q, body);
     case 'documenti': return rDocumenti_(m, q, body, user);
+    case 'documento': return docScarica_(q.id);
+    case 'documento-carica': return docCarica_(body || {}, user);
     case 'preventivi': return rPreventivi_(m, q, body, user);
     case 'kpi': return kpi_();
     case 'img': return img_(q.u);
@@ -321,6 +324,37 @@ function rDocumenti_(m, q, body, user) {
     appendRows_('Documenti', nuovi);
     return { salvati: n };
   });
+}
+
+// File dei documenti (istruzioni / schede CE): cartella Drive PRIVATA; il download passa dal backend e richiede il login della consolle.
+function cartellaDoc_() {
+  var p = PropertiesService.getScriptProperties(), id = p.getProperty('DRIVE_FOLDER_DOC');
+  if (id) { try { return DriveApp.getFolderById(id); } catch (e) { /* cancellata: la ricreo */ } }
+  var it = DriveApp.getFoldersByName(CFG.cartellaDocumenti);
+  var f = it.hasNext() ? it.next() : DriveApp.createFolder(CFG.cartellaDocumenti);
+  p.setProperty('DRIVE_FOLDER_DOC', f.getId());
+  return f;
+}
+var DOC_MIME = { pdf: 'application/pdf', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+function docCarica_(b, user) {
+  var nome = String(b.nome || '').replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim(), ext = (/\.(pdf|docx)$/i.exec(nome) || [])[1];
+  if (!nome || !ext) fail_(400, 'Nome file non valido (solo .pdf o .docx)');
+  if (!b.base64 || b.base64.length > 14000000) fail_(400, 'File mancante o troppo grande');
+  var f = cartellaDoc_(), it = f.getFilesByName(nome);
+  while (it.hasNext()) it.next().setTrashed(true); // stesso nome = nuova versione
+  var file = f.createFile(Utilities.newBlob(Utilities.base64Decode(b.base64), DOC_MIME[ext.toLowerCase()], nome));
+  return { id: file.getId(), nome: nome };
+}
+function docScarica_(id) {
+  id = String(id || '');
+  if (!/^[A-Za-z0-9_\-]{5,80}$/.test(id)) fail_(400, 'Documento non valido');
+  var file; try { file = DriveApp.getFileById(id); } catch (e) { fail_(404, 'Documento non trovato'); }
+  var dentro = false, ps = file.getParents(), fid = cartellaDoc_().getId();
+  while (ps.hasNext()) if (ps.next().getId() === fid) dentro = true;
+  if (!dentro) fail_(403, 'Documento non consentito'); // solo i file della cartella dei documenti
+  var blob = file.getBlob(), bytes = blob.getBytes();
+  if (bytes.length > 22000000) fail_(413, 'Documento troppo grande');
+  return { nome: file.getName(), mime: blob.getContentType(), base64: Utilities.base64Encode(bytes) };
 }
 
 // ═══════════════ PREVENTIVI ═══════════════

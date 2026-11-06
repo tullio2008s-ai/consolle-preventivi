@@ -162,6 +162,6 @@ textarea{resize:vertical}
 .spia-verde{background:#16a34a;box-shadow:0 0 0 3px rgba(22,163,74,.2);cursor:pointer}
 .spia-giallo{background:#f5b300;box-shadow:0 0 0 3px rgba(245,179,0,.25);cursor:pointer}
 .spia-rosso{background:#dc2626;box-shadow:0 0 0 3px rgba(220,38,38,.2)}
-.docb{white-space:nowrap}.docb .bsm{margin-left:6px;padding:2px 7px;font-size:11px}
+.docb{white-space:nowrap}.docb .bsm{margin-left:6px;padding:0 6px;font-size:12px;line-height:18px;border-color:#bbb;color:#555;background:#fff}
 .docmenu{position:absolute;z-index:50;background:#fff;border:1px solid #ccc;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.15);padding:4px}
 .docmenu a{display:block;padding:5px 12px;color:#0b3560;text-decoration:none;font-size:12px;white-space:nowrap}.docmenu a:hover{background:#edf5fa}

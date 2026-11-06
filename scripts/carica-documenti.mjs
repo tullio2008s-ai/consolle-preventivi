@@ -11,7 +11,14 @@ const post = async (path, body, token, method = 'POST') => {
 };
 const { token } = await post('login', { email: INIT_EMAIL, password: INIT_PASSWORD });
 const righe = JSON.parse(readFileSync(new URL('../data/documenti-registro.json', import.meta.url), 'utf8'));
-const verdi = new Set((await post('documenti', undefined, token, 'GET')).filter(d => d.stato === 'verde').map(d => d.sku + '|' + d.tipo));
-const da = righe.filter(r => !verdi.has(r.sku + '|' + r.tipo));
+const ex = await post('documenti', undefined, token, 'GET');
+const verdi = new Set(ex.filter(d => d.stato === 'verde').map(d => d.sku + '|' + d.tipo));
+const prima = Object.fromEntries(ex.map(d => { let l = {}; try { l = JSON.parse(d.lingue || '{}'); } catch { /* vuoto */ } return [d.sku + '|' + d.tipo, l]; }));
+// conserva file_id e nome dei file già caricati su Drive se il documento di origine è lo stesso (stessa data)
+const da = righe.filter(r => !verdi.has(r.sku + '|' + r.tipo)).map(r => {
+  const l = { ...r.lingue }, old = prima[r.sku + '|' + r.tipo] || {};
+  for (const k of Object.keys(l)) if (old[k]?.file_id && old[k].data === l[k].data) l[k] = { ...l[k], file_id: old[k].file_id, nome: old[k].nome };
+  return { ...r, lingue: l };
+});
 for (let i = 0; i < da.length; i += 60) await post('documenti', da.slice(i, i + 60), token);
 console.log('righe caricate:', da.length, '| già validate (verdi) lasciate com\'erano:', righe.length - da.length);
