@@ -201,10 +201,12 @@
     <label class="ilbl">📥 Importa Excel (aggiorna per SKU)<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="importProd(this)"></label>
   </div>
   <div class="fbar"><input id="pq" placeholder="Cerca per codice, nome o categoria…" oninput="renderProd()">
-    <select id="pcat" onchange="renderProd()"></select></div>
+    <select id="pcat" onchange="renderProd()"></select>
+    <select id="pdoc" onchange="renderProd()" title="Stato documenti"><option value="">Documenti: tutti</option><option value="rosso">🔴 Manca un documento</option><option value="giallo">🟡 Da validare</option><option value="verde">🟢 Tutto OK</option></select>
+    <span id="prod-doc" style="font-size:12px;color:#666;align-self:center"></span></div>
   <div class="card" style="padding:0;overflow:hidden">
     <div style="overflow-x:auto"><table class="tbl">
-      <thead><tr><th>Foto</th><th>SKU</th><th>Nome</th><th>Prezzo</th><th>Categoria</th><th>Scheda</th><th></th></tr></thead>
+      <thead><tr><th>Foto</th><th>SKU</th><th>Nome</th><th>Prezzo</th><th>Categoria</th><th>Istruzioni</th><th>Scheda CE</th><th>Scheda</th><th></th></tr></thead>
       <tbody id="prod-body"></tbody></table></div>
     <div id="prod-more" style="padding:10px;text-align:center;font-size:12px;color:#999"></div>
   </div>
@@ -258,6 +260,6 @@
 </div>
 
 <script src="config.js"></script>
-<script src="js/app.js?v=20261104e"></script>
+<script src="js/app.js?v=20261106a"></script>
 </body>
 </html>

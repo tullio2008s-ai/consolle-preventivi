@@ -32,6 +32,16 @@ t('lista clienti (zeri iniziali conservati)', () => { assert.equal(cli.length, 2
 t('modifica cliente', () => { const c = call('clienti', { method: 'POST', body: { id: cli[0].id, azienda: 'ACME SPA' } }, tok).data; assert.equal(c.azienda, 'ACME SPA'); assert.equal(call('clienti', {}, tok).data.length, 2); });
 t('elimina cliente', () => { call('clienti', { method: 'DELETE', query: { id: cli[1].id } }, tok); assert.equal(call('clienti', {}, tok).data.length, 1); });
 
+// documenti
+t('documenti: crea e aggiorna per (sku,tipo)', () => {
+  assert.equal(call('documenti', { method: 'POST', body: [{ sku: 'P1', tipo: 'istruzioni', stato: 'giallo', origine: 'A/B.docx', lingue: { IT: { origine: 'A/B.docx' } } }, { sku: 'P1', tipo: 'ce', stato: 'giallo', origine: 'A/B.docx' }] }, tok).data.salvati, 2);
+  call('documenti', { method: 'POST', body: { sku: 'P1', tipo: 'istruzioni', stato: 'verde' } }, tok);
+  const d = call('documenti', {}, tok).data; assert.equal(d.length, 2);
+  assert.equal(d.find(x => x.sku === 'P1' && x.tipo === 'istruzioni').stato, 'verde'); assert.ok(d.find(x => x.tipo === 'istruzioni').lingue.includes('IT'));
+});
+t('documenti: verde/giallo senza documento rifiutati', () => { assert.equal(call('documenti', { method: 'POST', body: { sku: 'P9', tipo: 'ce', stato: 'verde' } }, tok).status, 400); });
+t('documenti: tipo e stato validi', () => { assert.equal(call('documenti', { method: 'POST', body: { sku: 'P1', tipo: 'x' } }, tok).status, 400); assert.equal(call('documenti', { method: 'POST', body: { sku: 'P1', tipo: 'ce', stato: 'blu' } }, tok).status, 400); });
+t('documenti: elimina riga (torna rosso)', () => { call('documenti', { method: 'DELETE', query: { sku: 'P1', tipo: 'ce' } }, tok); assert.equal(call('documenti', {}, tok).data.length, 1); });
 // prodotti
 t('importa prodotti', () => assert.equal(call('prodotti', { method: 'POST', body: [{ sku: 'P1', nome: 'Gettoniera', prezzo: '341,6' }, { sku: 'P2', nome: 'Timer', prezzo: 10 }] }, tok).data.salvati, 2));
 t('upsert prodotto per SKU', () => { call('prodotti', { method: 'POST', body: { sku: 'P1', nome: 'Gettoniera 2', prezzo: 400 } }, tok); const p = call('prodotti', {}, tok).data; assert.equal(p.length, 2); assert.equal(p.find(x => x.sku === 'P1').prezzo, 400); });

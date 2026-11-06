@@ -11,7 +11,7 @@ const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '
 const dmy = iso => iso ? iso.slice(0, 10).split('-').reverse().join('/') : '';
 const eur = n => '€ ' + (+n || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-let PRODS = [], CLIS = [], ARCH = [];
+let PRODS = [], CLIS = [], ARCH = [], DOCS = {};
 let LOGO = '';             // dataURL del logo per i PDF
 let curId = null;          // id del preventivo aperto (null = nuovo)
 let items = [], seq = 0;
@@ -130,8 +130,42 @@ async function caricaDati() {
     // in sequenza: Apps Script gestisce male molte richieste contemporanee
     const prodotti = await api('prodotti'), clienti = await api('clienti');
     applicaDati(prodotti, clienti); salvaCache();
+    await caricaDocumenti();
   } catch (e) { if (!PRODS.length) catalogoCaricamento(false, e.message); else fail(e); }
   finally { caricando = false; }
+}
+
+// Documenti per prodotto: una riga per (sku, tipo). Assenza di riga = documento mancante (spia rossa)
+async function caricaDocumenti() {
+  try {
+    const rows = await api('documenti'); DOCS = {};
+    rows.forEach(d => { try { d.lingue = d.lingue ? JSON.parse(d.lingue) : {}; } catch (e) { d.lingue = {}; } DOCS[d.sku + '|' + d.tipo] = d; });
+    if ($('v-prodotti').style.display === 'block') renderProd();
+  } catch (e) { /* senza spie la pagina funziona lo stesso */ }
+}
+const docStato = (sku, tipo) => { const d = DOCS[sku + '|' + tipo]; return d && (d.origine || Object.keys(d.lingue).length) ? d.stato : 'rosso'; };
+const docTot = sku => { const a = docStato(sku, 'istruzioni'), b = docStato(sku, 'ce'); return a === 'rosso' || b === 'rosso' ? 'rosso' : a === 'giallo' || b === 'giallo' ? 'giallo' : 'verde'; };
+function docCella(sku, tipo) {
+  const st = docStato(sku, tipo), d = DOCS[sku + '|' + tipo], nome = tipo === 'ce' ? 'Scheda CE' : 'Istruzioni';
+  const tip = st === 'rosso' ? `${nome}: documento mancante` : st === 'giallo' ? `${nome}: da validare (clic per segnare come OK)\nOrigine: ${d.origine}\nLingue: ${Object.keys(d.lingue).join(', ') || '—'}` : `${nome}: OK (clic per riportare a "da validare")`;
+  const urls = d ? Object.entries(d.lingue).filter(([, x]) => x.url) : [];
+  return `<td class="docb"><span class="spia spia-${st}" title="${esc(tip)}" onclick="validaDoc('${esc(sku)}','${tipo}')"></span>${urls.length ? `<button class="bsm" onclick="apriDoc('${esc(sku)}','${tipo}',this)">${nome}</button>` : ''}</td>`;
+}
+async function validaDoc(sku, tipo) {
+  const st = docStato(sku, tipo); if (st === 'rosso') return showMsg('Manca il documento: non si può validare', 'warn');
+  const nuovo = st === 'giallo' ? 'verde' : 'giallo';
+  if (!confirm(nuovo === 'verde' ? `Segnare come VALIDATO (verde) ${tipo === 'ce' ? 'la scheda CE' : 'le istruzioni'} di ${sku}?` : `Riportare a "da validare" (giallo) ${sku}?`)) return;
+  try { await api('documenti', { method: 'POST', body: { sku, tipo, stato: nuovo } }); DOCS[sku + '|' + tipo].stato = nuovo; renderProd(); showMsg(nuovo === 'verde' ? 'Documento validato' : 'Riportato a da validare'); }
+  catch (e) { fail(e); }
+}
+function apriDoc(sku, tipo, btn) {
+  document.querySelectorAll('.docmenu').forEach(m => m.remove());
+  const l = Object.entries(DOCS[sku + '|' + tipo].lingue).filter(([, x]) => x.url);
+  if (l.length === 1) return void window.open(l[0][1].url, '_blank', 'noopener');
+  const m = document.createElement('div'); m.className = 'docmenu';
+  m.innerHTML = l.map(([k, x]) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(k)}${x.nome ? ' — ' + esc(x.nome) : ''}</a>`).join('');
+  const r = btn.getBoundingClientRect(); m.style.left = (r.left + scrollX) + 'px'; m.style.top = (r.bottom + scrollY + 2) + 'px';
+  document.body.appendChild(m); setTimeout(() => document.addEventListener('click', () => m.remove(), { once: true }), 0);
 }
 
 const TABS = ['dashboard', 'nuovo', 'archivio', 'clienti', 'prodotti', 'brochure'];
@@ -683,12 +717,16 @@ function exportCli() {
 // ─────────── PRODOTTI ───────────
 function renderProd() {
   const q = norm($('pq').value).trim(), cat = $('pcat').value;
-  const rows = PRODS.filter(p => (!cat || p.categoria === cat) && (!q || p._n.includes(q)));
+  const fd = $('pdoc').value;
+  const rows = PRODS.filter(p => (!cat || p.categoria === cat) && (!q || p._n.includes(q)) && (!fd || docTot(p.sku) === fd));
+  const cnt = { verde: 0, giallo: 0, rosso: 0 }; PRODS.forEach(p => cnt[docTot(p.sku)]++);
+  $('prod-doc').innerHTML = `<span class="spia spia-verde"></span> ${cnt.verde} &nbsp;<span class="spia spia-giallo"></span> ${cnt.giallo} &nbsp;<span class="spia spia-rosso"></span> ${cnt.rosso}`;
   $('prod-cnt').textContent = `(${rows.length}${rows.length !== PRODS.length ? ' di ' + PRODS.length : ''})`;
   $('prod-body').innerHTML = rows.slice(0, LIM).map(p => `<tr>
     <td>${p.foto_url ? `<img src="${esc(p.foto_url)}" style="width:36px;height:36px;object-fit:cover;border-radius:4px;border:1px solid #eee" loading="lazy" onerror="this.style.display='none'">` : '<span style="color:#ddd">—</span>'}</td>
     <td><span class="skub">${esc(p.sku)}</span></td><td style="max-width:260px"><strong>${esc(p.nome)}</strong></td>
     <td style="white-space:nowrap">${p.prezzo > 0 ? eur(p.prezzo) : '—'}</td><td style="font-size:11px;color:#999">${esc(p.categoria || '—')}</td>
+    ${docCella(p.sku, 'istruzioni')}${docCella(p.sku, 'ce')}
     <td><button class="bsm" style="white-space:nowrap" onclick="schedaProdotto('${esc(p.sku)}', this)">📄 Scheda prodotto</button></td>
     <td><button class="bsm bdel" onclick="delProd('${esc(p.sku)}')">✕</button></td></tr>`).join('');
   $('prod-more').textContent = rows.length > LIM ? `Mostrati i primi ${LIM}: usa ricerca o categoria.` : '';

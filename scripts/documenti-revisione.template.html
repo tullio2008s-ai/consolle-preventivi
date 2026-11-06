@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Abbinamento manuali ai prodotti</title>
+<style>
+:root{--navy:#0b3560;--cyan:#1fa9d6;--org:#f5a623;--pale:#edf5fa;--line:#d1d5db;--ink:#1f2937;--grey:#6b7280;--bg:#f4f6f8;--card:#fff}
+@media (prefers-color-scheme:dark){:root{--ink:#e5e7eb;--grey:#9ca3af;--bg:#0f1720;--card:#17212c;--pale:#1d2b3a;--line:#2c3a4a;--navy:#8cc4f0}}
+*{box-sizing:border-box}body{margin:0;font:14px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+h1{font-size:16px;margin:0;color:var(--navy);flex:1 1 220px}
+input[type=search],select{padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);font:inherit}
+button{padding:8px 14px;border:0;border-radius:6px;background:var(--org);color:#1f2937;font:600 13px inherit;cursor:pointer}
+main{max-width:1100px;margin:0 auto;padding:12px 16px 80px}
+.u{background:var(--card);border:1px solid var(--line);border-radius:8px;margin:10px 0;padding:12px 14px}
+.u.ok{border-left:4px solid #16a34a}.u.no{border-left:4px solid var(--org)}
+.t{font-weight:700;color:var(--navy)}.p{font-size:11px;color:var(--grey);word-break:break-word}
+.chips{margin:6px 0;display:flex;gap:6px;flex-wrap:wrap}.chip{background:var(--pale);border-radius:10px;padding:2px 9px;font-size:11px}
+.g{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;margin-top:8px}
+label.c{display:flex;gap:8px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:6px;cursor:pointer}
+label.c:has(input:checked){border-color:#16a34a;background:rgba(22,163,74,.1)}
+label.c img{width:54px;height:54px;object-fit:contain;background:#fff;border-radius:4px;flex:none}
+.sk{font:600 11px ui-monospace,Menlo,monospace;color:#b91c1c}.nm{font-size:12px}.pr{font-size:11px;color:var(--grey)}
+.x{display:flex;gap:8px;align-items:center;margin-top:8px;font-size:12px;flex-wrap:wrap}.x input[type=text]{padding:5px 7px;border:1px solid var(--line);border-radius:6px;width:150px;background:var(--card);color:var(--ink)}
+.auto{font-size:12px;color:#16a34a}
+</style></head><body>
+<header><h1>Abbinamento manuali ai prodotti <span id="cnt" style="font-weight:400;color:var(--grey)"></span></h1>
+<input type="search" id="q" placeholder="Cerca manuale…"><select id="fam"></select>
+<select id="st"><option value="">Tutti</option><option value="open">Da decidere</option><option value="done">Fatti</option></select>
+<button onclick="scarica()">Scarica conferme</button></header>
+<main id="list"></main>
+<script>
+const ROWS=/*ROWS*/[], CAT=/*CAT*/{};
+let S={};try{S=JSON.parse(localStorage.getItem('abb')||'{}')}catch(e){}
+const save=()=>{try{localStorage.setItem('abb',JSON.stringify(S))}catch(e){}};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fam=r=>r.u.split('/')[0];
+const eur=n=>'€ '+new Intl.NumberFormat('it-IT',{minimumFractionDigits:2}).format(n);
+document.getElementById('fam').innerHTML='<option value="">Tutte le famiglie</option>'+[...new Set(ROWS.map(fam))].sort().map(f=>`<option>${esc(f)}</option>`).join('');
+const cur=r=>S[r.u]||{s:r.auto.slice(),nessuno:false,altro:''};
+function ok(r){const c=cur(r);return c.s.length>0||c.nessuno||!!c.altro}
+function toggle(i,sku,on){const r=ROWS[i],c=S[r.u]=cur(r);c.s=c.s.filter(x=>x!==sku);if(on)c.s.push(sku);save();render(true)}
+function setF(i,k,v){const r=ROWS[i],c=S[r.u]=cur(r);c[k]=v;save();render(true)}
+function render(keep){
+  const q=document.getElementById('q').value.toLowerCase(),f=document.getElementById('fam').value,st=document.getElementById('st').value;
+  const y=window.scrollY;let n=0,done=0;
+  document.getElementById('list').innerHTML=ROWS.map((r,i)=>{
+    const d=ok(r);n++;if(d)done++;
+    if((f&&fam(r)!==f)||(q&&!(r.u+Object.values(r.doc).map(x=>x.file).join(' ')).toLowerCase().includes(q))||(st==='open'&&d)||(st==='done'&&!d))return'';
+    const c=cur(r),docs=Object.entries(r.doc).map(([l,x])=>`<span class="chip"><b>${l}</b> ${esc(x.file)} · ${x.data}${x.ext==='docx'?' · Word':''}</span>`).join('');
+    const cand=[...new Set([...r.auto,...r.c])].map(s=>{const p=CAT[s];if(!p)return'';
+      return `<label class="c"><input type="checkbox" ${c.s.includes(s)?'checked':''} onchange="toggle(${i},'${s}',this.checked)"><img loading="lazy" src="${esc(p.f)}" onerror="this.style.visibility='hidden'" alt=""><span><span class="sk">${s}</span><br><span class="nm">${esc(p.n.slice(0,70))}</span><br><span class="pr">${eur(p.p)}</span></span></label>`}).join('');
+    return `<div class="u ${d?'ok':'no'}"><div class="t">${esc(r.u.split('/').pop())}</div><div class="p">${esc(r.u)}</div><div class="chips">${docs}</div>
+      ${r.auto.length?'<div class="auto">Codice trovato nel nome della cartella: confermato in automatico (puoi togliere la spunta)</div>':''}
+      <div class="g">${cand||'<i style="color:var(--grey)">Nessun candidato trovato</i>'}</div>
+      <div class="x"><label><input type="checkbox" ${c.nessuno?'checked':''} onchange="setF(${i},'nessuno',this.checked)"> Nessun prodotto / non serve</label>
+      <span>Altro codice:</span><input type="text" value="${esc(c.altro||'')}" placeholder="es. SC123456" onchange="setF(${i},'altro',this.value.trim())"></div></div>`}).join('');
+  document.getElementById('cnt').textContent=`— decisi ${done} su ${n}`;
+  if(keep)window.scrollTo(0,y)}
+function scarica(){
+  const out={};ROWS.forEach(r=>{const c=cur(r);out[r.u]={prodotti:c.s,altro:c.altro||'',nessuno:!!c.nessuno,documenti:r.doc}});
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(out,null,1)],{type:'application/json'}));a.download='conferme-abbinamenti.json';a.click()}
+['q','fam','st'].forEach(id=>document.getElementById(id).addEventListener('input',()=>render()));
+render();
+</script></body></html>

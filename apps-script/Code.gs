@@ -27,7 +27,8 @@ var SCHEMA = {
   Righe: ['preventivo_id', 'posizione', 'sku', 'descrizione', 'quantita', 'prezzo_unit', 'sconto_pct', 'iva_pct', 'nota', 'foto_url'],
   Storico: ['preventivo_id', 'quando', 'utente', 'evento', 'dettaglio'],
   Utenti: ['email', 'nome', 'password_hash', 'attivo'],
-  Config: ['chiave', 'valore']
+  Config: ['chiave', 'valore'],
+  Documenti: ['sku', 'tipo', 'stato', 'lingue', 'origine', 'nota', 'aggiornato_il', 'aggiornato_da']
 };
 var NUMERICI = {
   Prodotti: ['prezzo'],
@@ -73,6 +74,7 @@ function route_(req) {
     case 'password': return cambiaPassword_(body || {}, user);
     case 'clienti': return rClienti_(m, q, body);
     case 'prodotti': return rProdotti_(m, q, body);
+    case 'documenti': return rDocumenti_(m, q, body, user);
     case 'preventivi': return rPreventivi_(m, q, body, user);
     case 'kpi': return kpi_();
     case 'img': return img_(q.u);
@@ -91,7 +93,17 @@ function ss_() {
   _ss = id ? SpreadsheetApp.openById(id) : setup_();
   return _ss;
 }
-function sh_(name) { return ss_().getSheetByName(name); }
+function sh_(name) {
+  var book = ss_(), s = book.getSheetByName(name);
+  if (!s && SCHEMA[name]) { // foglio introdotto dopo il primo avvio (es. Documenti): lo creo al volo
+    var cols = SCHEMA[name];
+    s = book.insertSheet(name);
+    s.getRange(1, 1, 1, cols.length).setNumberFormat('@').setValues([cols]);
+    s.getRange(2, 1, 2000, cols.length).setNumberFormat('@');
+    s.setFrozenRows(1);
+  }
+  return s;
+}
 
 function setup_() {
   var ss = SpreadsheetApp.create(CFG.nomeFoglio);
@@ -137,7 +149,7 @@ function toRow_(name, o) {
 }
 function appendRows_(name, objs, ssOpt) {
   if (!objs.length) return;
-  var s = (ssOpt || ss_()).getSheetByName(name), cols = SCHEMA[name], start = s.getLastRow() + 1;
+  var s = ssOpt ? ssOpt.getSheetByName(name) : sh_(name), cols = SCHEMA[name], start = s.getLastRow() + 1;
   s.getRange(start, 1, objs.length, cols.length).setNumberFormat('@').setValues(objs.map(function (o) { return toRow_(name, o); }));
 }
 function updateRow_(name, row, o) {
@@ -276,6 +288,38 @@ function rProdotti_(m, q, body) {
     });
     appendRows_('Prodotti', nuovi);
     return { salvati: rows.length };
+  });
+}
+
+// ═══════════════ DOCUMENTI (istruzioni / scheda CE per prodotto) ═══════════════
+// Una riga per (sku, tipo). Spia: verde = tutto ok, giallo = da validare, rosso = manca (nessuna riga o senza documento).
+var DOC_TIPI = ['istruzioni', 'ce'], DOC_STATI = ['verde', 'giallo', 'rosso'];
+function rDocumenti_(m, q, body, user) {
+  if (m === 'GET') return readAll_('Documenti').map(strip_);
+  return withLock_(function () {
+    var all = readAll_('Documenti'), key = function (o) { return o.sku + '|' + o.tipo; };
+    if (m === 'DELETE') {
+      rewrite_('Documenti', all.filter(function (d) { return key(d) !== q.sku + '|' + q.tipo; }).map(strip_)); return { ok: true };
+    }
+    if (m !== 'POST') fail_(405, 'Metodo non consentito');
+    var by = {}; all.forEach(function (d) { by[key(d)] = d; });
+    var now = new Date().toISOString(), nuovi = [], n = 0;
+    (Array.isArray(body) ? body : [body]).forEach(function (r) {
+      r = r || {};
+      var sku = String(r.sku || '').trim(), tipo = String(r.tipo || '').trim();
+      if (!sku || DOC_TIPI.indexOf(tipo) < 0) fail_(400, 'SKU e tipo (istruzioni/ce) obbligatori');
+      var ex = by[sku + '|' + tipo], cur = ex ? strip_(ex) : { sku: sku, tipo: tipo, stato: 'rosso', lingue: '', origine: '', nota: '' };
+      if (r.stato != null) { if (DOC_STATI.indexOf(r.stato) < 0) fail_(400, 'Stato non valido'); cur.stato = r.stato; }
+      if (r.lingue != null) cur.lingue = typeof r.lingue === 'string' ? r.lingue : JSON.stringify(r.lingue);
+      if (r.origine != null) cur.origine = String(r.origine);
+      if (r.nota != null) cur.nota = String(r.nota);
+      if (cur.stato !== 'rosso' && !cur.lingue && !cur.origine) fail_(400, 'Senza documento la spia può essere solo rossa (' + sku + ')');
+      cur.aggiornato_il = now; cur.aggiornato_da = user.n;
+      if (ex) updateRow_('Documenti', ex._row, cur); else { nuovi.push(cur); by[sku + '|' + tipo] = cur; }
+      n++;
+    });
+    appendRows_('Documenti', nuovi);
+    return { salvati: n };
   });
 }
 
