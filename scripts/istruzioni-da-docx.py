@@ -48,7 +48,7 @@ def runs_md(p):
     """testo con <b> per i tratti in grassetto"""
     out = []
     for r in p.iter(q('w', 'r')):
-        t = ''.join((e.text or '') if e.tag == q('w', 't') else ' ' for e in r if e.tag in (q('w', 't'), q('w', 'tab')))
+        t = ''.join((e.text or '') if e.tag == q('w', 't') else ' ' for e in r if e.tag in (q('w', 't'), q('w', 'tab'), q('w', 'br')))
         if not t: continue
         rp = r.find(q('w', 'rPr')); b = rp is not None and rp.find(q('w', 'b')) is not None and rp.find(q('w', 'b')).get(q('w', 'val')) not in ('0', 'false')
         t = escape(t); out.append('<b>%s</b>' % t if b else t)
@@ -86,7 +86,7 @@ def image_flow(target):
     else: im = im.convert('RGB')
     k = min(1, 1100 / max(im.size)); im = im.resize((int(im.width * k), int(im.height * k)))
     buf = io.BytesIO(); im.save(buf, 'JPEG', quality=86); buf.seek(0)
-    mw, mh = 80 * mm, 58 * mm; s = min(mw / im.width, mh / im.height, 0.3 * mm * 4)  # px->pt
+    mw, mh = 150 * mm, 100 * mm; s = min(mw / im.width, mh / im.height, 0.3 * mm * 4)  # px->pt
     s = min(mw / im.width, mh / im.height); w, h = im.width * s, im.height * s
     sm = im.resize((64, 64)).convert('RGB'); px = [p_ for p_ in sm.getdata() if sum(p_) < 720]
     logo = bool(px) and sum(1 for r_, g_, b_ in px if r_ > 170 and g_ < 100 and b_ < 100) / len(px) > .6
