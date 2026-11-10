@@ -951,14 +951,16 @@ async function imgData(url) { // la foto passa dal backend (il bucket S3 non ha 
 // Prova livelli di compattezza crescenti (foto più bassa, testo e spaziature leggermente ridotti) e usa il primo che sta in una pagina sola;
 // se il testo è davvero lungo resta il layout normale su più pagine.
 async function buildBrochure() {
-  const livelli = [68, 62, 56, 50, 44, 38, 32].map(ph => ({ ph, k: 1 })).concat([{ ph: 38, k: 0.95 }, { ph: 32, k: 0.92 }, { ph: 28, k: 0.9 }, { ph: 0, k: 0.88 }]);
+  // una pagina sola solo se ci sta con una foto di almeno 40 mm; altrimenti due pagine con la foto grande (mai una scheda senza foto per risparmiare spazio)
+  const conFoto = !!brProd.foto_url;
+  const livelli = conFoto ? [68, 62, 56, 50, 44, 40].map(ph => ({ ph, k: 1 })).concat([{ ph: 44, k: 0.95 }, { ph: 40, k: 0.92 }]) : [{ ph: 0, k: 1 }, { ph: 0, k: 0.95 }, { ph: 0, k: 0.9 }, { ph: 0, k: 0.88 }];
   const prima = await buildBrochureOnce(livelli[0]);
   if (prima.doc.getNumberOfPages() === 1) return prima;
   for (const lv of livelli.slice(1)) { const r = await buildBrochureOnce(lv); if (r.doc.getNumberOfPages() === 1) return r; }
-  // regola: mai più di 2 pagine (con la foto sempre presente se disponibile); testo un po' più piccolo finché serve
+  // regola: mai più di 2 pagine; testo un po' più piccolo finché serve
   if (prima.doc.getNumberOfPages() <= 2) return prima;
-  for (const k of [0.95, 0.92, 0.9, 0.88, 0.85]) { const r = await buildBrochureOnce({ ph: 56, k }); if (r.doc.getNumberOfPages() <= 2) return r; }
-  return await buildBrochureOnce({ ph: 40, k: 0.82 });
+  for (const k of [0.95, 0.92, 0.9, 0.88, 0.85]) { const r = await buildBrochureOnce({ ph: conFoto ? 56 : 0, k }); if (r.doc.getNumberOfPages() <= 2) return r; }
+  return await buildBrochureOnce({ ph: conFoto ? 40 : 0, k: 0.82 });
 }
 async function buildBrochureOnce(lv) {
   const { jsPDF } = window.jspdf, doc = new jsPDF({ unit: 'mm', format: 'a4' }), W = 210, M = 15, R = W - M, BOT = 272;
