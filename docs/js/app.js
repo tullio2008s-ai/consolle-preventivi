@@ -929,7 +929,17 @@ function brPreview() {
 const fotoVarianti = u => [...new Set([u.replace('ss-pics.s3.eu-west-1.amazonaws.com', 'files.scontrino.com').replace('/original-', '/large-'), u.replace('/original-', '/large-'), u])];
 async function imgData(url) { // la foto passa dal backend (il bucket S3 non ha CORS) e viene ridimensionata
   let data = null, err;
-  for (const v of fotoVarianti(url)) { try { data = (await api('img?u=' + encodeURIComponent(v))).dataUrl; break; } catch (e) { err = e; } }
+  for (const v of fotoVarianti(url)) {
+    try { // il sito attuale delle foto accetta richieste dirette dal browser: nessun passaggio dal backend
+      if (v.startsWith('https://files.scontrino.com/')) {
+        const r = await fetch(v); if (!r.ok) throw new Error('Foto non disponibile (' + r.status + ')');
+        const bl = await r.blob();
+        data = await new Promise((res, rej) => { const f = new FileReader(); f.onload = () => res(f.result); f.onerror = rej; f.readAsDataURL(bl); });
+      }
+    } catch (e) { err = e; }
+    if (data) break;
+    try { data = (await api('img?u=' + encodeURIComponent(v))).dataUrl; break; } catch (e) { err = e; }
+  }
   if (!data) throw err;
   // ridimensiona e comprime (le foto originali arrivano a 2000 px e gonfiano il PDF a decine di MB)
   const im = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = data; });
@@ -981,7 +991,7 @@ async function buildBrochureOnce(lv) {
       need(maxH + 12);
       doc.addImage(im.data, im.fmt, M + (maxW - w) / 2, y + 3 + (maxH - h) / 2, w, h);
       stroke(FR); doc.roundedRect(M, y, maxW, maxH + 6, 2, 2, 'S'); y += maxH + 12;
-    } catch (e) { showMsg('Foto non scaricabile: brochure senza immagine', 'warn'); }
+    } catch (e) { showMsg('Foto non scaricabile (' + (e.message || e) + '): scheda senza immagine', 'warn'); }
   }
   // in breve: dimensioni, peso, alimentazione, consegna (solo se presenti nella scheda)
   if (facts.length) {
