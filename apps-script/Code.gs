@@ -485,12 +485,13 @@ function pulisci_(h) {
     .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
     .replace(/&euro;/g, '€').replace(/&times;/g, '×').replace(/&ndash;/g, '–').replace(/&#(\d+);/g, function (_, n) { return String.fromCharCode(+n); })
     .replace(/[\u{1F000}-\u{1FFFF}\u{2190}-\u{27BF}\uFE0F\u200D]/gu, '') // emoji e simboli: il PDF non li sa disegnare
+    .replace(/[\u200B-\u200F\u2060\uFEFF]/g, '').replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, ' ') // spazi invisibili del sito: nel PDF diventerebbero lettere spaziate
     .replace(/\s+/g, ' ').replace(/\s+([.,;:])/g, '$1').trim();
 }
 function scheda_(sku) {
   sku = String(sku || '').trim();
   if (!/^[A-Za-z0-9_.\-]{2,40}$/.test(sku)) fail_(400, 'Codice non valido');
-  var cache = CacheService.getScriptCache(), ck = 'scheda5_' + sku, hit = cache.get(ck);
+  var cache = CacheService.getScriptCache(), ck = 'scheda6_' + sku, hit = cache.get(ck);
   if (hit) return JSON.parse(hit);
   var res = { trovato: false }, nome = '', foto = '';
   var s = sitoGet_('/search?q=' + encodeURIComponent(sku)), parts = s.split('{"name_1":'), path = '', prezzo = 0;
@@ -553,7 +554,14 @@ function parseScheda_(blk) {
       }
       else if (mode === 'h4') { if (sez) sez.voci.push({ l: '', t: t, d: 1, h: 1 }); else if (!out.sottotitolo) out.sottotitolo = t; }
       else if (mode === 'p') {
-        if (/declina ogni responsabilit|^prima di ordinare/i.test(t)) { /* avvisi legali del sito: non vanno in brochure */ }
+        var pallino = /^[·•▪●◦]\s*/.test(t); if (pallino) t = t.replace(/^[·•▪●◦]\s*/, ''); // elenco incollato da Word: il pallino è testo
+        if (!t || /declina ogni responsabilit|^prima di ordinare|^nota\.?$|^per informazioni addizionali/i.test(t)) { /* avvisi e rimandi del sito: non vanno in brochure */ }
+        else if (/^descrizione del prodotto:?$/i.test(t)) { chiudiIntro(); if (!sez) { sez = { titolo: 'Caratteristiche', voci: [] }; out.sezioni.push(sez); } }
+        else if (pallino) {
+          chiudiIntro(); if (!sez) { sez = { titolo: 'Caratteristiche', voci: [] }; out.sezioni.push(sez); }
+          var lm = /^([^:\d][^:]{1,39}?)\s*:\s*(\S[\s\S]*)$/.exec(t);
+          sez.voci.push(lm && t.length < 500 ? { l: lm[1], t: lm[2], d: 1 } : { l: '', t: t, d: 1 });
+        }
         else if (!sez) paras.push(t); else sez.voci.push({ l: '', t: t, d: 1 });
       }
       else if (mode === 'li' && sez) {

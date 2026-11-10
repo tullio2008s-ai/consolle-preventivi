@@ -890,7 +890,7 @@ async function brCarica() {
 // testo → struttura: "> intro", "# sezione", "Etichetta: testo", "- sotto-punto"
 function brParse(txt) {
   const out = { intro: '', sezioni: [] }; let sec = null;
-  txt.split('\n').map(l => l.trim()).filter(Boolean).forEach(l => {
+  txt.split('\n').map(l => l.replace(/[\u200B-\u200F\u2060\uFEFF]/g, '').replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, ' ').replace(/^[·•▪●◦]\s*/, '').trim()).filter(Boolean).forEach(l => {
     if (l.startsWith('> ')) { out.intro = (out.intro ? out.intro + ' ' : '') + l.slice(2); return; }
     if (l.startsWith('# ')) { sec = { titolo: l.slice(2), voci: [] }; out.sezioni.push(sec); return; }
     if (!sec) { sec = { titolo: 'Caratteristiche', voci: [] }; out.sezioni.push(sec); }
@@ -918,15 +918,19 @@ function brFacts(m) { // riquadro "In breve": solo ciò che c'è nel testo
 function brPreview() {
   if (!brProd) return;
   const m = brParse($('br-d').value), facts = brFacts(m);
-  $('br-prev').innerHTML = `<div style="text-align:center">${brProd.foto_url ? `<img src="${esc(brProd.foto_url)}" style="max-width:100%;max-height:200px;object-fit:contain">` : ''}</div>
+  $('br-prev').innerHTML = `<div style="text-align:center">${brProd.foto_url ? `<img src="${esc(fotoVarianti(brProd.foto_url)[0])}" style="max-width:100%;max-height:200px;object-fit:contain">` : ''}</div>
     <h3 style="margin:10px 0 4px;color:#0b3560">${esc($('br-t').value)}</h3><div class="skub">${esc($('br-sku').value)}</div>
     ${m.intro ? `<p style="font-size:12.5px;margin:8px 0">${esc(m.intro)}</p>` : ''}
     ${facts.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0">${facts.map(f => `<div style="background:#edf5fa;padding:6px 9px;border-radius:4px;font-size:11.5px"><div style="font-size:9px;color:#6b7280;font-weight:700">${f.k}</div><b style="color:#0b3560">${esc(f.v)}</b>${f.s ? ` <span style="color:#6b7280;font-size:10px">${f.s}</span>` : ''}</div>`).join('')}</div>` : ''}
     ${m.sezioni.map(s => `<div style="font-weight:700;color:#0b3560;margin:10px 0 3px;border-left:3px solid #1fa9d6;padding-left:6px">${esc(s.titolo)}</div><ul style="margin:0 0 0 18px;font-size:12px">${s.voci.map(v => v.h ? `<li style="list-style:none;margin-left:-14px;font-weight:700;color:#0b3560;margin-top:6px">${esc(v.t)}</li>` : `<li style="${v.sub ? 'margin-left:14px;' : ''}">${v.l ? `<b>${esc(v.l)}</b>${v.t ? ': ' : ''}` : ''}${esc(v.t)}</li>`).join('')}</ul>`).join('')}
     ${$('br-p').value ? `<div class="arc-tot">${eur(+$('br-p').value)} <span style="font-size:11px;color:#aaa;font-weight:400">IVA esclusa</span></div>` : ''}`;
 }
+// le foto del catalogo importato puntano a versioni "original-" non più accessibili: provo la versione "large-" sul dominio attuale
+const fotoVarianti = u => [...new Set([u.replace('ss-pics.s3.eu-west-1.amazonaws.com', 'files.scontrino.com').replace('/original-', '/large-'), u.replace('/original-', '/large-'), u])];
 async function imgData(url) { // la foto passa dal backend (il bucket S3 non ha CORS) e viene ridimensionata
-  const data = (await api('img?u=' + encodeURIComponent(url))).dataUrl;
+  let data = null, err;
+  for (const v of fotoVarianti(url)) { try { data = (await api('img?u=' + encodeURIComponent(v))).dataUrl; break; } catch (e) { err = e; } }
+  if (!data) throw err;
   // ridimensiona e comprime (le foto originali arrivano a 2000 px e gonfiano il PDF a decine di MB)
   const im = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = data; });
   const k = Math.min(1, 1000 / Math.max(im.naturalWidth, im.naturalHeight));
